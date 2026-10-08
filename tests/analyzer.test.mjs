@@ -93,7 +93,7 @@ test('policy validates malformed values', () => {
   assert.throws(() => parsePolicy({...DEFAULT_POLICY, maxOutputs: -1}), /số nguyên/);
   assert.throws(() => parsePolicy({...DEFAULT_POLICY, allowedLockCodeHashes:['oops']}), /code_hash/);
   assert.throws(() => parsePolicy({...DEFAULT_POLICY, denyTypeScripts:'true'}), /boolean/);
-  assert.throws(() => parsePolicy({...DEFAULT_POLICY, version:2}), /version=1/);
+  assert.throws(() => parsePolicy({...DEFAULT_POLICY, version:3}), /version=1/);
 });
 test('analyzer is deterministic and does not mutate inputs', () => {
   const tx = clone(RISK_TRANSACTION);

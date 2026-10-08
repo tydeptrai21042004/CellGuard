@@ -20,7 +20,7 @@
       </header>
       <div class="terminal-body">
         <div class="intro">
-          <p class="terminal-version">[ <strong>CellGuard</strong> <span>v0.2</span> ] <span class="separator">::</span> transaction policy inspector <span class="separator">::</span> browser</p>
+          <p class="terminal-version">[ <strong>CellGuard</strong> <span>v0.3</span> ] <span class="separator">::</span> transaction policy inspector <span class="separator">::</span> browser</p>
           <h1>Inspect transaction outputs before signing.</h1>
           <p class="intro-copy">Run output-capacity and application-policy checks using CKB transaction JSON. No wallet, RPC, server upload or signing.</p>
           <p class="intro-comment"># This terminal runs in your browser. Its commands are a UI shortcut, not a system shell. Sample transactions are synthetic, not live chain data.</p>
@@ -30,7 +30,7 @@
           <form id="command-form" autocomplete="off">
             <label for="command-input" class="prompt-label">builder@cellguard:~$ <span id="command-hint">command</span></label>
             <div class="command-row"><span class="chevron" aria-hidden="true">&gt;</span><input id="command-input" name="command" type="text" maxlength="4096" value="inspect safe" aria-describedby="command-help" autocapitalize="off" spellcheck="false" autocomplete="off" /><button id="analyze" class="run-button" type="submit">run <span aria-hidden="true">↵</span></button></div>
-            <p id="command-help" class="muted command-help">Commands: <code>inspect safe</code> · <code>inspect risk</code> · <code>inspect type</code> · <code>inspect json</code> · <code>help</code> · <code>clear</code>. Press Enter to run.</p>
+            <p id="command-help" class="muted command-help">Commands: <code>inspect safe</code> · <code>inspect risk</code> · <code>inspect type</code> · <code>inspect json</code> · <code>diff</code> · <code>load strict</code> · <code>undo</code> · <code>help</code> · <code>clear</code>. Press Enter to run.</p>
           </form>
           <div class="examples" aria-label="Example commands"><span>examples:</span><button type="button" class="text-action" data-command="inspect safe">passing transfer</button><span class="mini-dot">·</span><button type="button" class="text-action" data-command="inspect risk">policy failures</button><span class="mini-dot">·</span><button type="button" class="text-action" data-command="inspect type">type script</button><span class="mini-dot">·</span><button type="button" class="text-action" data-command="help">help</button></div>
         </section>
@@ -45,7 +45,9 @@
           <div id="status" class="status idle" role="status" aria-live="polite"><span class="status-icon" aria-hidden="true">i</span><div><strong>Ready to inspect</strong><p>Run an example or paste a raw transaction in the JSON workbench.</p></div></div>
           <div id="metrics" class="metrics" hidden></div>
           <div id="checks" class="checks" hidden></div>
+          <div id="findings-tools" class="findings-tools" hidden><label for="finding-filter">Filter findings</label><input id="finding-filter" type="search" placeholder="Search code, path or explanation…" autocomplete="off" /></div>
           <div id="findings" class="findings" hidden></div>
+          <div id="diff-results" class="diff-results" hidden></div>
           <div id="outputs" class="outputs" hidden><div class="output-heading"><h3>Output cells</h3><span class="muted">Only output scripts and capacity are inspected · no VM execution or cycle measurement</span></div><div class="table-scroll"><table><thead><tr><th>#</th><th>Lock script / hash type</th><th>Type script</th><th>Capacity (CKB)</th><th>Occupied (CKB)</th><th>Free (CKB)</th><th>Data bytes</th></tr></thead><tbody id="outputs-body"></tbody></table></div></div>
           <div class="scope-line" id="scope-line" hidden><strong>NOT VERIFIED</strong><span>Chain state · inputs · witnesses/signatures · fees · CKB-VM · script cycles</span></div>
         </section>
@@ -54,17 +56,22 @@
           <div class="workbench-head"><div><h2 id="workbench-heading"><span class="faint-symbol">$</span> JSON workbench</h2><p>Paste or upload a raw transaction, configure policy, then run <code>inspect json</code>.</p></div><button type="button" id="toggle-workbench" class="secondary-button" aria-controls="workbench-content" aria-expanded="false">open editor <span aria-hidden="true">⌄</span></button></div>
           <div id="workbench-content" hidden>
             <div class="editor-grid">
-              <section class="editor-card" aria-label="Raw transaction JSON editor"><div class="editor-title"><strong>transaction.json</strong><div class="editor-actions"><button type="button" id="load-safe" class="text-action">safe example</button><button type="button" id="load-risk" class="text-action">risk example</button><button type="button" id="upload-trigger" class="text-action">upload JSON ↑</button></div></div><label for="transaction-input" class="field-label">CKB transaction JSON</label><textarea id="transaction-input" spellcheck="false" aria-describedby="tx-tip" placeholder='{"outputs":[],"outputs_data":[]}'></textarea><p class="editor-note" id="tx-tip">Maximum 1 MiB JSON · up to 512 outputs · only outputs and outputs_data are evaluated</p><input id="file-input" class="visually-hidden" type="file" accept=".json,application/json" aria-label="Choose transaction JSON file" /></section>
-              <section class="editor-card" aria-label="Policy JSON editor"><div class="editor-title"><strong>policy.json</strong><button type="button" id="reset-policy" class="text-action">reset policy ↺</button></div><label for="policy-input" class="field-label">Application policy JSON</label><textarea id="policy-input" spellcheck="false" aria-describedby="policy-tip"></textarea><p class="editor-note" id="policy-tip">Strict key validation · full script allowlists compare code_hash, hash_type and args</p></section>
+              <section class="editor-card" aria-label="Raw transaction JSON editor"><div class="editor-title"><strong>transaction.json</strong><div class="editor-actions"><button type="button" id="load-safe" class="text-action">safe example</button><button type="button" id="load-risk" class="text-action">risk example</button><button type="button" id="upload-trigger" class="text-action">upload JSON ↑</button></div></div><label for="transaction-input" class="field-label">CKB transaction JSON</label><textarea id="transaction-input" spellcheck="false" aria-describedby="tx-tip" placeholder='{"outputs":[],"outputs_data":[]}'></textarea><p class="editor-note" id="tx-tip">Maximum 1 MiB JSON · up to 512 outputs · v2 strict mode also validates raw transaction shape</p><input id="file-input" class="visually-hidden" type="file" accept=".json,application/json" aria-label="Choose transaction JSON file" /></section>
+              <section class="editor-card" aria-label="Policy JSON editor"><div class="editor-title"><strong>policy.json</strong><div class="editor-actions"><button type="button" id="load-strict" class="text-action">strict v2 preset</button><button type="button" id="reset-policy" class="text-action">reset policy ↺</button></div></div><label for="policy-input" class="field-label">Application policy JSON</label><textarea id="policy-input" spellcheck="false" aria-describedby="policy-tip"></textarea><p class="editor-note" id="policy-tip">Policy v1 compatible; policy v2 adds strict raw shape, required recipients and type-script constraints</p></section>
             </div>
-            <div class="editor-bottom"><span>Data stays in your browser. Never paste private keys or secrets.</span><button type="button" id="inspect-json" class="run-button">inspect JSON <span aria-hidden="true">↵</span></button></div>
+            <section class="comparison-panel" aria-label="Compare transaction outputs">
+              <div class="editor-title"><strong>compare.json <span class="muted">optional baseline</span></strong><div class="editor-actions"><button type="button" id="compare-current" class="text-action">snapshot current transaction</button><button type="button" id="run-diff" class="text-action">compare with current →</button></div></div>
+              <label for="compare-input" class="field-label">Paste a previous transaction to compare indexed outputs (not an on-chain semantic diff)</label>
+              <textarea id="compare-input" class="compare-input" spellcheck="false" placeholder="Paste previous transaction JSON here"></textarea>
+            </section>
+            <div class="editor-bottom"><span>Local only. No RPC, wallet or remote storage. Never paste secrets.</span><div class="editor-actions"><button type="button" id="undo-replace" class="secondary-button" disabled>undo replacement</button><button type="button" id="inspect-json" class="run-button">inspect JSON <span aria-hidden="true">↵</span></button></div></div>
           </div>
         </section>
 
         <div class="help-strip"><span class="comment">#</span> Policy pass ≠ valid on-chain transaction. Hash-only lookup and script-cycle counts require an RPC/debugger integration that this offline release does not have.</div>
       </div>
     </main>
-    <footer class="site-footer"><span>MIT · CellGuard · browser-only developer prototype</span><span>0 dependencies · static Vercel deployment · no external requests</span></footer>
+    <footer class="site-footer"><span>MIT · CellGuard · offline developer tool · browser + Node CLI</span><span>0 dependencies · static Vercel deployment · no external requests</span></footer>
   </div>
 </body>
 </html>

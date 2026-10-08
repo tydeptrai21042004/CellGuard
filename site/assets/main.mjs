@@ -1,5 +1,7 @@
 import { analyzeTransaction } from './lib/analyzer.mjs';
-import { DEFAULT_POLICY } from './lib/policy.mjs';
+import { DEFAULT_POLICY, V2_POLICY } from './lib/policy.mjs';
+import { parseStrictJSON, MAX_JSON_BYTES } from './lib/strict-json.mjs';
+import { compareTransactions } from './lib/diff.mjs';
 import { SAFE_TRANSACTION, RISK_TRANSACTION, TYPE_TRANSACTION, DEMO_POLICY } from './lib/fixtures.mjs';
 import { parseTerminalCommand } from './lib/terminal.mjs';
 
@@ -17,7 +19,18 @@ const outputsBody = $('outputs-body');
 const scope = $('scope-line');
 const download = $('download-report');
 const copy = $('copy-report');
-const MAX_JSON_BYTES = 1024 * 1024;
+const compareInput = $('compare-input');
+const diffResults = $('diff-results');
+const filterInput = $('finding-filter');
+const findingsTools = $('findings-tools');
+const STRICT_DEMO_POLICY = Object.freeze({
+  ...V2_POLICY, ...DEMO_POLICY, version: 2, strictTransactionShape: true, requireAllowedLock: true,
+  requiredOutputs: [{ lock: DEMO_POLICY.allowedLockScripts[0], type: null, minCapacityCKB: '61', maxCapacityCKB: '100', minCount: 2, maxCount: 2 }]
+});
+let lastLoadedTexts = null;
+let undoReplacement = null;
+let editRevision = 0;
+let uploadSequence = 0;
 let currentReport = null;
 let currentSource = 'synthetic safe fixture';
 const history = [];
@@ -56,6 +69,8 @@ function invalidateReport() {
   metrics.replaceChildren(); metrics.hidden = true;
   checks.replaceChildren(); checks.hidden = true;
   findings.replaceChildren(); findings.hidden = true;
+  findingsTools.hidden = true;
+  diffResults.replaceChildren(); diffResults.hidden = true;
   outputsBody.replaceChildren(); outputs.hidden = true;
   scope.hidden = true;
   statusView('idle', 'Inputs modified', 'Run inspect json to analyze the updated transaction and policy.');
@@ -64,13 +79,41 @@ function updateSource(label) {
   currentSource = label;
   $('session-label').textContent = `local session · ${label}`;
 }
-function fixture(name) {
+function isModifiedFromLastLoad() {
+  return !!lastLoadedTexts && (txInput.value !== lastLoadedTexts.tx || policyInput.value !== lastLoadedTexts.policy);
+}
+function applyReplacement(nextTx, nextPolicy, label, { ask = true } = {}) {
+  const replacing = txInput.value !== nextTx || policyInput.value !== nextPolicy;
+  if (ask && replacing && isModifiedFromLastLoad() && !window.confirm('Replace the edited transaction/policy? Unsaved edits will be replaced. Use Undo replacement to restore them.')) return false;
+  if (replacing) {
+    undoReplacement = { tx: txInput.value, policy: policyInput.value, source: currentSource };
+    $('undo-replace').disabled = false;
+  }
+  txInput.value = nextTx;
+  policyInput.value = nextPolicy;
+  lastLoadedTexts = { tx: nextTx, policy: nextPolicy };
+  editRevision++;
+  updateSource(label);
+  invalidateReport();
+  return true;
+}
+function fixture(name, options = {}) {
   const selected = { safe: SAFE_TRANSACTION, risk: RISK_TRANSACTION, type: TYPE_TRANSACTION }[name];
   if (!selected) throw new Error('Unknown example fixture');
-  txInput.value = json(selected);
-  policyInput.value = json(DEMO_POLICY);
-  updateSource(`synthetic ${name} fixture`);
+  return applyReplacement(json(selected), json(DEMO_POLICY), `synthetic ${name} fixture`, options);
+}
+function undoLastReplacement() {
+  if (!undoReplacement) return false;
+  const before = undoReplacement;
+  undoReplacement = null;
+  $('undo-replace').disabled = true;
+  txInput.value = before.tx;
+  policyInput.value = before.policy;
+  lastLoadedTexts = { tx: before.tx, policy: before.policy };
+  editRevision++;
+  updateSource(before.source);
   invalidateReport();
+  return true;
 }
 function metric(name, value) {
   const node = text('div', 'metric');
@@ -85,6 +128,17 @@ function checkRow(label, passed) {
 function shortened(hash) {
   return hash ? `${hash.slice(0, 12)}…${hash.slice(-8)}` : '—';
 }
+const REPAIR_HINTS = Object.freeze({
+  CAPACITY_INSUFFICIENT: 'Increase the output capacity or reduce the occupied script/data bytes.',
+  POLICY_LOCK_NOT_ALLOWED: 'Review this lock code hash against the application allowlist.',
+  POLICY_LOCK_SCRIPT_NOT_ALLOWED: 'Check all three lock fields: code_hash, hash_type and args.',
+  POLICY_TYPE_REQUIRED: 'Set an authorized type script for this output, or disable the requirement intentionally.',
+  POLICY_REQUIRED_OUTPUT_COUNT: 'Check recipient lock, optional type, allowed amount range and required count.',
+  POLICY_REQUIRED_OUTPUT_CAPACITY: 'Correct the output amount to the configured recipient range.',
+  TRANSACTION_UNCHECKED_FIELDS: 'Review ignored properties or turn on v2 strictTransactionShape.',
+  POLICY_TOTAL_CAPACITY: 'Reduce total output capacity or increase the explicit policy budget.',
+  POLICY_DATA_TOO_LARGE: 'Reduce output data bytes or raise the application limit deliberately.'
+});
 function renderReport(report, durationMs) {
   const failed = report.errorCount > 0;
   const warned = report.warningCount > 0;
@@ -95,6 +149,7 @@ function renderReport(report, durationMs) {
 
   metrics.replaceChildren(
     metric('Policy result', result), metric('Total output capacity', `${report.totalCapacityCKB} CKB`),
+    metric('Free capacity', `${report.totalFreeCapacityCKB} CKB`),
     metric('Output data', `${report.totalDataBytes} bytes`), metric('Findings', String(report.findings.length))
   );
   metrics.hidden = false;
@@ -102,7 +157,8 @@ function renderReport(report, durationMs) {
     checkRow('occupied capacity', report.checks.capacity),
     checkRow('lock script policy', report.checks.lockPolicy),
     checkRow('type script policy', report.checks.typePolicy),
-    checkRow('other policy limits', report.checks.constraints)
+    checkRow('other policy limits', report.checks.constraints),
+    ...(report.policyVersion === 2 ? [checkRow('recipient intent rules', report.checks.intent)] : [])
   );
   checks.hidden = false;
   findings.replaceChildren();
@@ -114,9 +170,12 @@ function renderReport(report, durationMs) {
       const header = text('div', 'finding-header');
       header.append(text('strong', '', `${item.severity.toUpperCase()} · ${item.code}`), text('code', '', item.path));
       article.append(header, text('p', '', item.detail));
+      if (REPAIR_HINTS[item.code]) article.append(text('p', 'finding-tip', `→ ${REPAIR_HINTS[item.code]}`));
       findings.append(article);
     }
     findings.hidden = false;
+    findingsTools.hidden = false;
+    applyFindingFilter();
   }
   outputsBody.replaceChildren();
   for (const out of report.outputs) {
@@ -147,20 +206,43 @@ function renderReport(report, durationMs) {
   ];
   promptEcho($('command-input').value.trim() || 'inspect json', lines);
 }
-function parseJSON(input, name) {
-  if (new Blob([input]).size > MAX_JSON_BYTES) throw new Error(`${name} exceeds the 1 MiB limit`);
-  try { return JSON.parse(input); }
-  catch (error) {
-    const reason = error instanceof Error ? error.message : 'invalid JSON';
-    throw new Error(`${name}: ${reason}`);
+function parseJSON(input, name) { return parseStrictJSON(input, name); }
+function applyFindingFilter() {
+  const needle = filterInput.value.toLowerCase().trim();
+  for (const item of findings.querySelectorAll('article.finding')) {
+    item.hidden = !!needle && !item.textContent.toLowerCase().includes(needle);
   }
 }
+function renderDiff(report) {
+  invalidateReport();
+  currentReport = { ...report, source: currentSource, analyzerVersion: '0.3.0', generatedAt: new Date().toISOString() };
+  copy.disabled = false;
+  download.disabled = false;
+  statusView(report.changeCount ? 'warn' : 'pass',
+    report.changeCount ? `${report.changeCount} indexed output changes` : 'No indexed output changes detected',
+    'Comparison is offline; output data is compared exactly, and output reordering may change indices.');
+  for (const change of report.changes) {
+    const article = text('article');
+    article.append(text('strong', '', change.description), text('p', '', change.path));
+    const values = text('div', 'diff-content');
+    values.append(text('span', '', 'before: '), text('code', '', change.before), text('span', '', '\nafter:  '), text('code', '', change.after));
+    article.append(values);
+    diffResults.append(article);
+  }
+  if (!report.changes.length) diffResults.append(text('p', 'muted', 'Indexed script identifiers, capacities and data lengths are unchanged.'));
+  diffResults.hidden = false;
+  scope.hidden = false;
+  promptEcho('diff', [['good', `comparison complete: ${report.changeCount} changes`], ['warning', 'not an on-chain, input or witness comparison']]);
+}
 function doInspect(command, fixtureName) {
-  if (fixtureName !== 'json') fixture(fixtureName);
+  if (fixtureName !== 'json' && !fixture(fixtureName)) {
+    promptEcho(command, [['warning', 'fixture replacement canceled; existing editor content preserved']]);
+    return;
+  }
   const start = performance.now();
   const report = analyzeTransaction(parseJSON(txInput.value, 'Transaction JSON'), parseJSON(policyInput.value, 'Policy JSON'));
   const elapsed = performance.now() - start;
-  currentReport = { ...report, analyzerVersion: '0.2.0', source: currentSource, generatedAt: new Date().toISOString() };
+  currentReport = { ...report, analyzerVersion: '0.3.0', source: currentSource, generatedAt: new Date().toISOString() };
   download.disabled = false;
   copy.disabled = false;
   renderReport(currentReport, elapsed);
@@ -177,7 +259,9 @@ function runCommand(raw) {
   if (history.length > 40) history.shift();
   historyIndex = history.length;
   commandInput.value = command;
-  const parsed = parseTerminalCommand(command);
+  let parsed;
+  try { parsed = parseTerminalCommand(command); }
+  catch (error) { promptEcho('command', [['error', error instanceof Error ? error.message : 'Invalid command']]); return; }
   switch (parsed.action) {
     case 'inspect':
       try { doInspect(command, parsed.fixture); }
@@ -189,8 +273,28 @@ function runCommand(raw) {
       }
       break;
     case 'load':
-      fixture(parsed.fixture);
-      promptEcho(command, [['good', `loaded ${currentSource}`], ['comment', 'run inspect json to evaluate the loaded inputs']]);
+      if (fixture(parsed.fixture)) promptEcho(command, [['good', `loaded ${currentSource}`], ['comment', 'run inspect json to evaluate the loaded inputs']]);
+      else promptEcho(command, [['warning', 'replacement canceled']]);
+      break;
+    case 'strict-policy':
+      if (applyReplacement(txInput.value, json(STRICT_DEMO_POLICY), 'strict policy v2 / local transaction')) {
+        promptEcho(command, [['good', 'strict v2 policy loaded; current transaction preserved'], ['comment', 'adjust requiredOutputs and allowlists for your actual application']]);
+        showEditor(true);
+      } else promptEcho(command, [['warning', 'replacement canceled']]);
+      break;
+    case 'undo':
+      { const restored = undoLastReplacement(); promptEcho(command, [[restored ? 'good' : 'warning', restored ? 'restored previous editor content' : 'no prior replacement to undo']]); }
+      break;
+    case 'diff':
+      try {
+        if (!compareInput.value.trim()) { showEditor(true); throw new Error('Paste previous transaction JSON into compare.json first'); }
+        renderDiff(compareTransactions(parseJSON(compareInput.value, 'Previous transaction'), parseJSON(txInput.value, 'Current transaction')));
+      } catch (error) {
+        invalidateReport();
+        const message = error instanceof Error ? error.message : 'Cannot compare transactions';
+        statusView('fail', 'Comparison failed', message);
+        promptEcho(command, [['error', message]]);
+      }
       break;
     case 'clear':
       invalidateReport();
@@ -202,6 +306,9 @@ function runCommand(raw) {
         ['plain', 'inspect safe | risk | type    analyze bundled synthetic fixture'],
         ['plain', 'inspect json                analyze transaction.json and policy.json'],
         ['plain', 'load safe | risk | type     load example without running'],
+        ['plain', 'load strict                  use v2 strict policy, keeping transaction'],
+        ['plain', 'diff                         compare current JSON with comparison editor'],
+        ['plain', 'undo                         restore editor before last replacement'],
         ['plain', 'policy                      open editable JSON workbench'],
         ['plain', 'examples                    list synthetic examples'],
         ['plain', 'status                      show verification coverage'],
@@ -221,7 +328,7 @@ function runCommand(raw) {
       promptEcho(command, [['good', 'mode: offline browser preflight'], ['plain', 'covered: output structure, occupied capacity, configured policy'], ['warning', 'not verified: tx hash lookup, chain state, input cells, fees, witnesses, signature validity, CKB-VM, cycles'], ['comment', 'network: none · wallet: none · server storage: none']]);
       break;
     case 'report':
-      promptEcho(command, [['plain', currentReport ? `report ready: ${currentReport.result} (${currentReport.outputCount} outputs)` : 'no report · run inspect first'], ['comment', 'use copy JSON or export report after a successful analysis']]);
+      promptEcho(command, [['plain', currentReport ? currentReport.mode === 'indexed-output-diff' ? `comparison report ready: ${currentReport.changeCount} indexed changes` : `policy report ready: ${currentReport.result} (${currentReport.outputCount} outputs)` : 'no report · run inspect first'], ['comment', 'use copy JSON or export report after an analysis']]);
       break;
     case 'hash-unsupported':
       promptEcho(command, [['error', 'error: transaction-hash lookup is unavailable in offline mode'], ['comment', 'paste the raw transaction JSON into the workbench and run inspect json'], ['warning', 'CellGuard deliberately does not invent block height, script cycles, or RPC results']]);
@@ -243,20 +350,33 @@ commandInput.addEventListener('keydown', event => {
 });
 $('toggle-workbench').addEventListener('click', () => showEditor($('workbench-content').hidden));
 $('inspect-json').addEventListener('click', () => runCommand('inspect json'));
-$('load-safe').addEventListener('click', () => { fixture('safe'); commandInput.value = 'inspect json'; });
-$('load-risk').addEventListener('click', () => { fixture('risk'); commandInput.value = 'inspect json'; });
+$('load-safe').addEventListener('click', () => { if (fixture('safe')) commandInput.value = 'inspect json'; });
+$('load-risk').addEventListener('click', () => { if (fixture('risk')) commandInput.value = 'inspect json'; });
 $('reset-policy').addEventListener('click', () => {
-  policyInput.value = json(DEFAULT_POLICY);
-  invalidateReport();
-  promptEcho('policy reset', [['good', 'policy reset to default (no allowlist restrictions)']]);
+  if (applyReplacement(txInput.value, json(DEFAULT_POLICY), 'default policy / local transaction')) {
+    promptEcho('policy reset', [['warning', 'policy reset to unrestricted defaults; configure allowlists before enforcement']]);
+  }
 });
-txInput.addEventListener('input', () => { updateSource('edited transaction JSON'); invalidateReport(); });
-policyInput.addEventListener('input', invalidateReport);
+txInput.addEventListener('input', () => { editRevision++; updateSource('edited transaction JSON'); invalidateReport(); });
+policyInput.addEventListener('input', () => { editRevision++; invalidateReport(); });
+compareInput.addEventListener('input', () => { if (currentReport?.mode === 'indexed-output-diff') invalidateReport(); });
+filterInput.addEventListener('input', applyFindingFilter);
+$('load-strict').addEventListener('click', () => runCommand('load strict'));
+$('run-diff').addEventListener('click', () => runCommand('diff'));
+$('undo-replace').addEventListener('click', () => runCommand('undo'));
+$('compare-current').addEventListener('click', () => {
+  if (compareInput.value.trim() && compareInput.value !== txInput.value && !window.confirm('Replace the comparison baseline with the current transaction?')) return;
+  compareInput.value = txInput.value;
+  if (currentReport?.mode === 'indexed-output-diff') invalidateReport();
+  promptEcho('snapshot', [['good', 'saved current transaction in comparison editor (browser memory only)']]);
+});
 $('upload-trigger').addEventListener('click', () => $('file-input').click());
 $('file-input').addEventListener('change', async event => {
   const input = event.currentTarget;
   const file = input.files?.[0];
   if (!file) return;
+  const startedAt = editRevision;
+  const requestId = ++uploadSequence;
   input.value = '';
   if (file.size > MAX_JSON_BYTES) {
     invalidateReport();
@@ -266,10 +386,13 @@ $('file-input').addEventListener('change', async event => {
   try {
     const body = await file.text();
     parseJSON(body, 'Uploaded JSON');
-    txInput.value = body;
-    updateSource(`uploaded ${file.name.slice(0, 80)}`);
-    invalidateReport();
-    promptEcho('upload transaction.json', [['good', 'JSON loaded · run inspect json to evaluate it']]);
+    if (editRevision !== startedAt || requestId !== uploadSequence) {
+      promptEcho('upload transaction.json', [['warning', 'Upload finished after editor changed; file was not applied']]);
+      return;
+    }
+    if (applyReplacement(body, policyInput.value, `uploaded ${file.name.slice(0, 80)}`)) {
+      promptEcho('upload transaction.json', [['good', 'JSON loaded · run inspect json to evaluate it']]);
+    } else promptEcho('upload transaction.json', [['warning', 'Upload canceled; editor preserved']]);
   } catch (error) {
     invalidateReport();
     statusView('fail', 'Unable to load JSON', error instanceof Error ? error.message : 'Read failed');
@@ -307,5 +430,7 @@ download.addEventListener('click', () => {
 });
 
 // Show a working demonstration on first load, always labeled synthetic/offline.
-fixture('safe');
-runCommand('inspect safe');
+fixture('safe', { ask: false });
+undoReplacement = null;
+$('undo-replace').disabled = true;
+runCommand('inspect json');

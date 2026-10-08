@@ -1,6 +1,6 @@
 {
   "name": "cellguard-web",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Terminal-style, offline, browser-first CKB policy preflight",
@@ -8,6 +8,7 @@
   "scripts": {
     "dev": "node scripts/serve.mjs",
     "test": "node --test tests/*.test.mjs",
+    "cli": "node cli/cellguard.mjs",
     "check": "node scripts/check-build.mjs && node --test tests/*.test.mjs"
   },
   "license": "MIT"

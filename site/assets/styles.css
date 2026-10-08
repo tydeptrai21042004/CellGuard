@@ -195,3 +195,19 @@ textarea:focus { border-color: var(--green); }
   .site-footer { padding: 14px 6px; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+
+/* v0.3 enhancements: findings search, compact comparison panel and keyboard focus */
+.findings-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 16px 0 8px; font-size: 11px; color: var(--muted); }
+.findings-tools input { flex: 1; min-width: 200px; border: 1px solid var(--line-bright); border-radius: 5px; background: var(--field); color: var(--white); padding: 8px 10px; }
+.comparison-panel { margin-top: 14px; padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 7px; }
+textarea.compare-input { min-height: 105px; max-height: 280px; }
+.diff-results { margin-top: 12px; }
+.diff-results article { border: 1px solid var(--line); border-left: 3px solid var(--cyan); border-radius: 6px; padding: 11px 13px; margin: 8px 0; overflow-wrap: anywhere; font-size: 12px; }
+.diff-results code { color: var(--cyan); }
+.diff-results p { color: var(--muted); margin: 4px 0; }
+.diff-results .diff-content { font-family: monospace; white-space: pre-wrap; word-break: break-all; }
+.diff-results .diff-content span { color: var(--faint); }
+button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+[hidden] { display: none !important; }
+
+.finding p.finding-tip { color: var(--cyan); opacity: .88; }

@@ -1,0 +1,41 @@
+{
+  "version": "0x0",
+  "cell_deps": [],
+  "header_deps": [],
+  "inputs": [],
+  "outputs": [
+    {
+      "capacity": "0x165a0bc00",
+      "lock": {
+        "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "hash_type": "type",
+        "args": "0x2222222222222222222222222222222222222222"
+      },
+      "type": null
+    },
+    {
+      "capacity": "0xdf8475800",
+      "lock": {
+        "code_hash": "0xefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+        "hash_type": "type",
+        "args": "0x2222222222222222222222222222222222222222"
+      },
+      "type": null
+    },
+    {
+      "capacity": "0x4a817c800",
+      "lock": {
+        "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "hash_type": "type",
+        "args": "0x2222222222222222222222222222222222222222"
+      },
+      "type": null
+    }
+  ],
+  "outputs_data": [
+    "0x",
+    "0xabababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababababab",
+    "0x"
+  ],
+  "witnesses": []
+}

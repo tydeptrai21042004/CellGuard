@@ -8,7 +8,9 @@ const required = [
   'site/assets/styles.css', 'site/assets/lib/ckb.mjs',
   'site/assets/lib/policy.mjs', 'site/assets/lib/analyzer.mjs',
   'site/assets/lib/fixtures.mjs', 'site/assets/lib/terminal.mjs',
-  '.github/workflows/ci.yml', '.gitignore', 'docs/01_TRIEN_KHAI_VERCEL.md'
+  'site/assets/lib/diff.mjs', 'site/assets/lib/strict-json.mjs',
+  'cli/cellguard.mjs', '.github/workflows/ci.yml', '.gitignore',
+  'examples/safe-tx.json', 'examples/strict-policy.json', 'docs/01_TRIEN_KHAI_VERCEL.md'
 ];
 for (const path of required) {
   if (!existsSync(join(root, path))) throw new Error(`Missing deployment file: ${path}`);

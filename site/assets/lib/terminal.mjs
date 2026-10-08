@@ -9,7 +9,10 @@ export function parseTerminalCommand(raw) {
   if (normalized === 'clear' || normalized === 'cls') return { action: 'clear' };
   if (normalized === 'status') return { action: 'status' };
   if (normalized === 'policy') return { action: 'policy' };
+  if (normalized === 'diff' || normalized === 'compare json') return { action: 'diff' };
+  if (normalized === 'undo') return { action: 'undo' };
   if (normalized === 'report') return { action: 'report' };
+  if (normalized === 'load strict') return { action: 'strict-policy' };
   if (normalized === 'load safe' || normalized === 'load risk' || normalized === 'load type') {
     return { action: 'load', fixture: normalized.slice(5) };
   }

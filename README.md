@@ -1,10 +1,10 @@
 # CellGuard — Browser Transaction Policy Terminal
 
-A **working terminal-style web interface** for offline CKB transaction-output inspection and application policy preflight. This is a **web app, not a native CLI**: commands typed into its prompt are explicitly parsed in the browser and never run as system commands.
+A **terminal-style web interface plus real Node CLI** for offline CKB transaction-output inspection and application policy preflight. Browser prompt commands never execute system shell commands. `cli/cellguard.mjs` is an actual command-line tool intended for CI checks.
 
-**Version 0.2.0 · static site · zero npm dependencies · Vercel-ready · no API keys.**
+**Version 0.3.0 · static site · zero npm dependencies · Vercel-ready · no API keys.**
 
-> **Security scope:** CellGuard examines `outputs` and `outputs_data`, calculates occupied capacity with `BigInt`, and applies configurable application policy. It does **not** look up transaction hashes, call RPC, verify inputs/signatures, calculate fees, execute CKB-VM, measure script cycles, or establish on-chain validity. Included examples are synthetic fixtures, NOT on-chain testnet samples. A green policy result is **not** a successful consensus verification.
+> **Security scope:** CellGuard examines `outputs` and `outputs_data`, optionally checks raw transaction structure (policy v2), calculates occupied capacity with `BigInt`, and applies configurable application policy. It does **not** look up transaction hashes, call RPC, check input liveness/signatures, calculate fees, execute CKB-VM, measure script cycles, or establish on-chain validity. Included examples are synthetic fixtures, NOT on-chain testnet samples. A green policy result is **not** a successful consensus verification.
 
 ## Quick start
 
@@ -26,6 +26,9 @@ npm run check
 | `inspect type` | Analyze a synthetic output with a type script |
 | `inspect json` | Analyze the JSON currently in the workbench editors |
 | `load safe`, `load risk`, `load type` | Load a fixture into the editor without running the check |
+| `load strict` | Apply strict v2 demo policy to current transaction |
+| `diff` | Compare indexed outputs against the comparison JSON editor |
+| `undo` | Restore editors from before the last automated replacement |
 | `policy` | Open editable transaction and policy JSON |
 | `help`, `examples`, `status`, `report` | Display command help and local state |
 | `clear` | Clear the rendered report without changing editor inputs |
@@ -33,6 +36,18 @@ npm run check
 Use **open editor** to paste raw transaction JSON, upload a local `.json` file (max 1 MiB), and edit the policy. Click **inspect JSON** or press **Ctrl/⌘+Enter** inside an editor. Use **copy JSON** or **export report** to extract a result. All operations take place locally in the browser.
 
 **Transaction hashes are deliberately unsupported** in this release: `inspect 0x...` explains that raw transaction JSON is required. Script groups and cycle counts are not fabricated.
+
+## Native CLI / GitHub Actions
+
+Run the same deterministic analyzer directly with Node, suitable for pull-request regression guards:
+
+```bash
+node cli/cellguard.mjs --transaction examples/safe-tx.json --policy examples/strict-policy.json
+node cli/cellguard.mjs --transaction examples/safe-tx.json --policy examples/strict-policy.json --format json
+node cli/cellguard.mjs --transaction examples/risk-tx.json --compare examples/safe-tx.json
+```
+
+Exit codes: `0` = configured checks pass; `1` = policy violation or warnings with `--fail-on-warning`; `2` = invalid input/configuration. Exit `0` does **not** establish transaction validity or chain safety. See `docs/08_CELLGUARD_V03_USAGE.md` for v2 rule semantics and limitations.
 
 ## Deploy to Vercel
 
@@ -45,7 +60,7 @@ No server-side runtime or environment variables are needed. The CSP includes `co
 
 ## Raw transaction input
 
-The inspector supports the CKB raw transaction **output portion**, for example:
+The inspector supports the CKB raw transaction **output portion** (v2 can additionally validate raw shape), for example:
 
 ```json
 {
@@ -100,6 +115,12 @@ Capacity values are hexadecimal shannons. Occupied capacity = `8 + lock script s
 - All decimal CKB budget values must be nonnegative strings with at most eight fractional places.
 - A finding marked `warning` (e.g. excess free capacity) does not imply a consensus error.
 
+### Policy version 2
+
+Policy v1 remains backward-compatible. Policy v2 adds strict raw transaction shape validation and opt-in recipient intent rules, type-script requirements, total-free-capacity budgets and exact output-count/amount bounds. The strict v2 preset in the UI is **a synthetic example**, not a general-purpose safe policy. See [`docs/08_CELLGUARD_V03_USAGE.md`](docs/08_CELLGUARD_V03_USAGE.md) and [`examples/strict-policy.json`](examples/strict-policy.json).
+
+JSON input now rejects duplicate keys and enforces bounded size, depth and tokens. Unknown transaction fields are a **warning** for policy v1 and an **error** in v2 strict mode.
+
 ## Project files
 
 ```text
@@ -114,6 +135,11 @@ site/
       policy.mjs            # Strict policy validation and exact script rules
       analyzer.mjs          # Pure offline report generator
       fixtures.mjs          # Three synthetic samples
+      strict-json.mjs       # Duplicate-key-rejecting bounded parser
+      diff.mjs              # Indexed output comparison
+cli/
+  cellguard.mjs            # Native Node CI runner; no RPC or wallet
+examples/                   # Synthetic transaction and strict-policy JSON
 scripts/
   serve.mjs                 # Local HTTP dev server
   check-build.mjs           # Static checks
@@ -124,7 +150,7 @@ vercel.json                # No-build static site + CSP
 
 ## Verification and roadmap
 
-Run `npm run check` to verify the deterministic analyzer, negative tests, command parser, asset syntax, and Vercel configuration. CI executes the same checks without installing dependencies.
+Run `npm run check` to verify the deterministic analyzer, v2 policy constraints, duplicate-key parser, CLI, negative tests, command parser, asset syntax, and Vercel configuration. CI executes the same checks without installing dependencies.
 
 A future RPC integration, if explicitly designed and opt-in, would require new CSP/network policies, chain-specific validation, independent verification against real transactions, abuse prevention, and security review. **This release remains deliberately offline and read-only.**
 

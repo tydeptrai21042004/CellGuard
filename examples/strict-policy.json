@@ -1,0 +1,42 @@
+{
+  "version": 2,
+  "maxOutputs": 20,
+  "maxDataBytesPerOutput": 256,
+  "maxTotalDataBytes": 2048,
+  "maxTotalOutputCapacityCKB": "1000",
+  "maxFreeCapacityCKBPerOutput": "25",
+  "allowedLockCodeHashes": [
+    "0x1111111111111111111111111111111111111111111111111111111111111111"
+  ],
+  "allowedTypeCodeHashes": [],
+  "allowedLockScripts": [
+    {
+      "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "hash_type": "type",
+      "args": "0x2222222222222222222222222222222222222222"
+    }
+  ],
+  "allowedTypeScripts": [],
+  "denyTypeScripts": false,
+  "strictTransactionShape": true,
+  "minOutputs": 1,
+  "requireTypeScript": false,
+  "maxTypeScriptOutputs": 512,
+  "requireOutputDataEmpty": false,
+  "requireAllowedLock": true,
+  "maxTotalFreeCapacityCKB": null,
+  "requiredOutputs": [
+    {
+      "lock": {
+        "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "hash_type": "type",
+        "args": "0x2222222222222222222222222222222222222222"
+      },
+      "type": null,
+      "minCapacityCKB": "61",
+      "maxCapacityCKB": "100",
+      "minCount": 2,
+      "maxCount": 2
+    }
+  ]
+}
