@@ -1,0 +1,14 @@
+{
+  "name": "cellguard-web",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only, browser-first CKB transaction policy preflight demo",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "dev": "node scripts/serve.mjs",
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check-build.mjs && node --test tests/*.test.mjs"
+  },
+  "license": "MIT"
+}

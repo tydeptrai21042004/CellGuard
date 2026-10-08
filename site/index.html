@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0c1222" />
+  <meta name="description" content="CellGuard Web: offline CKB transaction policy and occupied-capacity preflight, read-only and wallet-free." />
+  <title>CellGuard Web — CKB transaction policy preflight</title>
+  <link rel="stylesheet" href="./assets/styles.css" />
+  <script defer type="module" src="./assets/main.mjs"></script>
+</head>
+<body>
+  <div class="app-frame">
+    <header class="masthead">
+      <a class="brand" href="/" aria-label="CellGuard Web, trang chủ"><span class="brand-mark" aria-hidden="true">◇</span><span>CellGuard <span class="brand-muted">Web</span></span></a>
+      <div class="head-right"><span class="tag"><span class="dot"></span> Offline / Browser-only</span><span class="tag light">Prototype v0.1</span></div>
+    </header>
+    <main class="container">
+      <div class="hero">
+        <div class="eyebrow">CKB DEVELOPER INFRASTRUCTURE</div>
+        <h1>Check the transaction.<br><span>Before it gets signed.</span></h1>
+        <p>Kiểm tra dung lượng Cell và chính sách ứng dụng trực tiếp trên trình duyệt. Không ví, không private key, không cần RPC.</p>
+        <div class="hero-points"><span>✓ BigInt / shannons chính xác</span><span>✓ Không gửi dữ liệu lên server</span><span>✓ Báo cáo JSON có thể tái lập</span></div>
+      </div>
+      <div class="notice" role="note"><strong>Giới hạn quan trọng:</strong> Kiểm tra offline này không chạy CKB-VM, không xác thực chữ ký, input, fee hay trạng thái blockchain. “Passed” chỉ có nghĩa là vượt qua các quy tắc được triển khai, <strong>không phải bằng chứng giao dịch an toàn hoặc hợp lệ on-chain.</strong></div>
+      <div class="section-heading"><div><h2>Transaction workbench</h2><p>Nạp dữ liệu ví dụ hoặc dán CKB raw transaction JSON với <code>outputs</code> và <code>outputs_data</code>.</p></div><div class="pill">100% read-only</div></div>
+      <div class="workspace">
+        <section class="panel editor-panel" aria-label="Transaction JSON">
+          <div class="panel-title"><div><span class="icon-circle">01</span><strong>CKB transaction JSON</strong></div><div class="panel-actions"><button class="ghost" type="button" id="load-safe">Ví dụ đạt</button><button class="ghost" type="button" id="load-risk">Ví dụ lỗi</button></div></div>
+          <label class="field-label" for="transaction-input">Raw transaction</label>
+          <textarea id="transaction-input" spellcheck="false" aria-describedby="tx-tip" placeholder='{"outputs":[],"outputs_data":[]}'></textarea>
+          <div class="panel-footer"><span id="tx-tip">Giới hạn dữ liệu: 1 MiB · tối đa 512 outputs</span><label for="file-input" class="upload-button">⇧ Nạp tệp JSON<input id="file-input" type="file" accept=".json,application/json" hidden /></label></div>
+        </section>
+        <section class="panel policy-panel" aria-label="Policy JSON">
+          <div class="panel-title"><div><span class="icon-circle">02</span><strong>Application policy</strong></div><button class="ghost" id="reset-policy" type="button">Đặt lại</button></div>
+          <label class="field-label" for="policy-input">Edit policy JSON</label>
+          <textarea id="policy-input" spellcheck="false" aria-describedby="policy-tip"></textarea>
+          <div class="panel-footer" id="policy-tip"><span>Danh sách code_hash trống = không giới hạn</span><span>version 1</span></div>
+        </section>
+      </div>
+      <div class="runbar"><div><strong>Local preflight</strong><span>Phân tích tại trình duyệt; không gửi transaction ra ngoài.</span></div><button class="primary" type="button" id="analyze">Phân tích giao dịch <span aria-hidden="true">→</span></button></div>
+      <section class="results" id="results-section" aria-labelledby="results-title">
+        <div class="section-heading"><div><h2 id="results-title">Analysis report</h2><p>Chỉ phản ánh chính sách đã cấu hình và thông tin trong JSON.</p></div><button class="ghost export" id="download-report" type="button" disabled>Tải JSON report ↓</button></div>
+        <div id="status" class="status idle" role="status" aria-live="polite"><div class="status-icon" aria-hidden="true">i</div><div><strong>Ready to analyze</strong><span>Chọn một ví dụ rồi nhấn “Phân tích giao dịch”.</span></div></div>
+        <div id="metrics" class="metrics" hidden></div>
+        <div id="findings" class="findings" aria-live="polite"></div>
+        <div id="outputs" class="output-table-wrap" hidden><h3>Output breakdown</h3><div class="table-scroll"><table><thead><tr><th>Output</th><th>Capacity (CKB)</th><th>Occupied (CKB)</th><th>Free (CKB)</th><th>Data bytes</th></tr></thead><tbody id="outputs-body"></tbody></table></div></div>
+      </section>
+      <footer><span>CellGuard Web · Open-source technical prototype</span><span>No wallet · No backend · No transaction submission</span></footer>
+    </main>
+  </div>
+</body>
+</html>
