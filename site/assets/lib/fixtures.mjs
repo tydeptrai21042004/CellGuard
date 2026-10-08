@@ -18,5 +18,16 @@ export const RISK_TRANSACTION = Object.freeze({
 });
 export const DEMO_POLICY = Object.freeze({
   ...DEFAULT_POLICY,
-  allowedLockCodeHashes: [lock.code_hash]
+  allowedLockCodeHashes: [lock.code_hash],
+  allowedLockScripts: [lock]
+});
+
+// Synthetic type-script example (never claim the script actually executed).
+export const TYPE_TRANSACTION = Object.freeze({
+  version: '0x0', cell_deps: [], header_deps: [], inputs: [],
+  outputs: [{
+    ...output(100),
+    type: { code_hash: '0x' + '33'.repeat(32), hash_type: 'data2', args: '0x' }
+  }],
+  outputs_data: ['0xabcd'], witnesses: []
 });

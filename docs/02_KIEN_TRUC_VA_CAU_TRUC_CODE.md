@@ -117,3 +117,8 @@ Các mục này cần yêu cầu thiết kế riêng (và thực nghiệm), khô
 ## 7. Vì sao chưa cần Next.js?
 
 Static HTML + ES modules đáp ứng trọn vẹn yêu cầu phân tích offline và deploy Vercel. Next.js có giá trị khi cần API routes, auth, SSR, server-side RPC proxies hoặc scale team, nhưng ở MVP sẽ làm tăng số dependency và build steps mà chưa tạo giá trị bảo mật. Roadmap xem `06_ROADMAP_NEXTJS_VA_CCC.md`.
+
+
+## Cập nhật v0.2 — Terminal UI
+
+`site/assets/lib/terminal.mjs` parses a small allowlist of browser-only UI commands; it does not execute shell commands. `site/index.html`, `site/assets/styles.css`, and `site/assets/main.mjs` implement the responsive terminal look and interactive report. Policy now rejects unknown keys and offers optional full lock/type script allowlists (`code_hash`, `hash_type`, `args`). These checks remain offline and do not establish on-chain validity. See `docs/07_TERMINAL_UI_AND_VALIDATION.md`.

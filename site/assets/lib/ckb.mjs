@@ -49,6 +49,7 @@ export function validateScript(value, field) {
   return Object.freeze({
     codeHash: value.code_hash.toLowerCase(),
     hashType: value.hash_type,
+    args: value.args.toLowerCase(),
     argsBytes,
     scriptBytes: 33 + argsBytes
   });

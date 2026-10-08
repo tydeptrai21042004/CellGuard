@@ -31,7 +31,7 @@
 | Không historical chain data | Không biết outpoint có live hay spent | RPC query và reorg-aware result |
 | No RPC | Không có testnet live verification | Optional read-only RPC giai đoạn sau |
 | Allowlist chỉ code_hash | Không kiểm tra `args` hoặc script identity đầy đủ | `hash_type + code_hash + args` matching rules, version mới |
-| Policy bỏ qua extra keys | Chính sách có typo có thể không được áp dụng | Strict schema trước production integration |
+| Policy extra keys | v0.2 từ chối unknown keys; vẫn cần kiểm toán từng policy rule trước khi dùng trong production | Regression test và independent review |
 | `policy` có thể do chính user sửa | Không có nguồn policy authority | Signed/pinned policy manifests trong CI |
 | Không xử lý transaction submission | Không thay thế CellFlow/wallet | Không mở tính năng này nếu không cần |
 

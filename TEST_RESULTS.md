@@ -1,20 +1,27 @@
-# CellGuard Web — Verification Record
+# CellGuard v0.2 — Verification Record
 
-Date: 2026-10-08
+Date: 2026-10-08. Engine: Node.js v22.16.0.
 
-## Locally verified
+## Verified in this code delivery
 
-- `npm run check`: **PASS — 19/19 tests** (Node.js v22.16.0).
-- Static layout, `vercel.json`, JavaScript syntax: **PASS**.
-- Local HTTP smoke test: **200** for `/`, `/assets/styles.css`, `/assets/main.mjs`, `/assets/lib/analyzer.mjs`, `/assets/lib/fixtures.mjs`.
-- Local HTTP smoke test: **404** for `/docs/01_TRIEN_KHAI_VERCEL.md` (outside public `site/`).
-- No npm packages installed; no dependencies declared in `package.json`.
+- `npm run check`: **45/45 tests passed**, including original 19 tests plus strict-policy and terminal-command regressions.
+- Static deployment configuration (`vercel.json`), JavaScript syntax checks, assets and CSP: **PASS**.
+- Local dev server `GET /`: **HTTP 200**.
+- Playwright Chromium isolated in-browser UI smoke tests: **PASS**, with modules loaded from local file-backed data URLs to accommodate this environment's blocked browser localhost navigation.
+  - Initial synthetic safe fixture: policy passed, 2 outputs.
+  - Risk fixture: policy failed and findings rendered.
+  - JSON workbench expands and strict-policy malformed input is rejected.
+  - `inspect 0x...` explicitly refuses RPC-based hash lookup.
+  - Type script fixture displays a type script without claiming execution.
+  - Mobile viewport 390px: no document-level horizontal overflow.
+  - No JavaScript console/page errors during observed interactions.
+- No npm packages required by the project; no wallet, external RPC, API key or backend.
 
-## Not yet verified
+## Remaining verification before production use
 
-- A live deployment on a real Vercel account (requires user Git/Vercel account access).
-- Browser automation on every device/browser.
-- CKB testnet inputs/RPC, CKB-VM or consensus validity (deliberately out of scope for this MVP).
-- Third-party review or ecosystem funding approval.
+- End-to-end tests on a deployed Vercel URL in real browsers and across screen readers.
+- Independent comparison with real CKB transactions and SDK/CCC behavior.
+- Input/witness/fee/CKB-VM/script-cycle consensus verification is **not implemented**.
+- Third-party source review, security audit, and funding approval not performed.
 
-See `docs/03_HUONG_DAN_KIEM_THU.md` for manual browser acceptance testing and future integration requirements.
+See `docs/07_TERMINAL_UI_AND_VALIDATION.md` for UI behaviors and manual QA cases.

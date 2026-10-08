@@ -1,7 +1,11 @@
 import { formatCkb, parseTransaction } from './ckb.mjs';
 import { parsePolicy } from './policy.mjs';
 
-/** Pure, deterministic offline evaluator. No wallet, RPC or contract execution. */
+function matchesExactScript(script, rules) {
+  return rules.some(rule => rule.codeHash === script.codeHash && rule.hashType === script.hashType && rule.args === script.args);
+}
+
+/** Pure, deterministic offline evaluator. No wallet, RPC, or contract execution. */
 export function analyzeTransaction(txInput, policyInput) {
   const tx = parseTransaction(txInput);
   const policy = parsePolicy(policyInput);
@@ -29,11 +33,17 @@ export function analyzeTransaction(txInput, policyInput) {
     if (policy.allowedLockCodeHashes.length && !policy.allowedLockCodeHashes.includes(output.lock.codeHash)) {
       push('POLICY_LOCK_NOT_ALLOWED', 'error', `${path}.lock.code_hash`, 'Lock code_hash không nằm trong allowlist của ứng dụng');
     }
+    if (policy.allowedLockScripts.length && !matchesExactScript(output.lock, policy.allowedLockScripts)) {
+      push('POLICY_LOCK_SCRIPT_NOT_ALLOWED', 'error', `${path}.lock`, 'Lock script không khớp đầy đủ code_hash + hash_type + args');
+    }
     if (output.type && policy.denyTypeScripts) {
       push('POLICY_TYPE_FORBIDDEN', 'error', `${path}.type`, 'Ứng dụng không cho phép type script trong output');
     }
     if (output.type && policy.allowedTypeCodeHashes.length && !policy.allowedTypeCodeHashes.includes(output.type.codeHash)) {
       push('POLICY_TYPE_NOT_ALLOWED', 'error', `${path}.type.code_hash`, 'Type code_hash không nằm trong allowlist của ứng dụng');
+    }
+    if (output.type && policy.allowedTypeScripts.length && !matchesExactScript(output.type, policy.allowedTypeScripts)) {
+      push('POLICY_TYPE_SCRIPT_NOT_ALLOWED', 'error', `${path}.type`, 'Type script không khớp đầy đủ code_hash + hash_type + args');
     }
     outputDetails.push({
       index: output.index,
@@ -42,7 +52,11 @@ export function analyzeTransaction(txInput, policyInput) {
       freeCKB: formatCkb(output.free),
       dataBytes: output.dataBytes,
       lockCodeHash: output.lock.codeHash,
-      typeCodeHash: output.type?.codeHash ?? null
+      lockHashType: output.lock.hashType,
+      lockArgs: output.lock.args,
+      typeCodeHash: output.type?.codeHash ?? null,
+      typeHashType: output.type?.hashType ?? null,
+      typeArgs: output.type?.args ?? null
     });
   }
   if (totalDataBytes > policy.maxTotalDataBytes) {
@@ -63,6 +77,17 @@ export function analyzeTransaction(txInput, policyInput) {
     totalCapacityCKB: formatCkb(totalCapacity),
     findings,
     outputs: outputDetails,
+    checks: {
+      capacity: !findings.some(f => f.code === 'CAPACITY_INSUFFICIENT'),
+      lockPolicy: !findings.some(f => ['POLICY_LOCK_NOT_ALLOWED', 'POLICY_LOCK_SCRIPT_NOT_ALLOWED'].includes(f.code)),
+      typePolicy: !findings.some(f => ['POLICY_TYPE_FORBIDDEN', 'POLICY_TYPE_NOT_ALLOWED', 'POLICY_TYPE_SCRIPT_NOT_ALLOWED'].includes(f.code)),
+      constraints: !findings.some(f => f.severity === 'error' && f.code.startsWith('POLICY_') && !['POLICY_LOCK_NOT_ALLOWED', 'POLICY_LOCK_SCRIPT_NOT_ALLOWED', 'POLICY_TYPE_FORBIDDEN', 'POLICY_TYPE_NOT_ALLOWED', 'POLICY_TYPE_SCRIPT_NOT_ALLOWED'].includes(f.code))
+    },
+    verification: {
+      policy: 'evaluated', transactionShape: 'output-only', onChain: 'not-verified',
+      scriptExecution: 'not-verified', cycleCounts: 'not-available',
+      signatures: 'not-verified', inputs: 'not-verified', fees: 'not-verified'
+    },
     disclaimer: 'Đây chỉ là kiểm tra cấu trúc và policy offline. Không chạy CKB-VM, không xác nhận input/fee/witness, không đảm bảo transaction hợp lệ hoặc an toàn trên chain.'
   };
 }

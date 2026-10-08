@@ -1,78 +1,51 @@
-# CellGuard Web — CKB Transaction Policy Preflight
+# CellGuard — Browser Transaction Policy Terminal
 
-**MVP web chạy ngay trên trình duyệt, triển khai Vercel không cần build, không cần wallet, RPC, database hoặc API key.**
+A **working terminal-style web interface** for offline CKB transaction-output inspection and application policy preflight. This is a **web app, not a native CLI**: commands typed into its prompt are explicitly parsed in the browser and never run as system commands.
 
-> **Phạm vi:** Phân tích cấu trúc `outputs`, `outputs_data`, occupied capacity và application policy. Đây **không phải** contract audit, CKB-VM simulator, full transaction validator hay sản phẩm production-certified. Ví dụ đi kèm là **synthetic fixtures**, không phải transaction đã xác nhận trên testnet.
+**Version 0.2.0 · static site · zero npm dependencies · Vercel-ready · no API keys.**
 
-## 1. Khởi chạy nhanh
+> **Security scope:** CellGuard examines `outputs` and `outputs_data`, calculates occupied capacity with `BigInt`, and applies configurable application policy. It does **not** look up transaction hashes, call RPC, verify inputs/signatures, calculate fees, execute CKB-VM, measure script cycles, or establish on-chain validity. Included examples are synthetic fixtures, NOT on-chain testnet samples. A green policy result is **not** a successful consensus verification.
 
-**Điều kiện:** Node.js 20+ chỉ để chạy thử và kiểm tra tự động ở máy cá nhân. Triển khai static trên Vercel không cần Node runtime.
+## Quick start
+
+Requires Node.js 20+ only for local development and automated tests. No install step.
 
 ```bash
-# Giải nén file ZIP, mở terminal trong thư mục cellguard-web
 npm run dev
-# mở http://localhost:3000
-```
+# visit http://localhost:3000
 
-Không cần `npm install` vì không có package bên ngoài. Chạy test:
-
-```bash
 npm run check
 ```
 
-**Đưa lên Vercel (cách khuyến nghị):** upload toàn bộ repo lên GitHub → Vercel **Add New → Project → Import** → Root Directory `.` → Framework `Other` → Build Command bỏ trống → Output Directory `site` → Deploy. `vercel.json` đã đặt sẵn các cấu hình này. **Không khai báo environment variables.**
+### Terminal UI commands
 
-**Cách nhanh hơn, không cần Git:** sử dụng [Vercel Drop](https://vercel.com/drop) và chỉ kéo thư mục `site/` lên, vì `site/` là web tĩnh hoàn chỉnh. Khi dùng Drop riêng, cấu hình header an toàn ở `vercel.json` không nhất thiết được áp dụng; Git import là phương án ưu tiên.
+| Command | Behavior |
+| --- | --- |
+| `inspect safe` | Analyze the synthetic passing-transfer fixture |
+| `inspect risk` | Analyze a fixture with capacity/data/lock policy failures |
+| `inspect type` | Analyze a synthetic output with a type script |
+| `inspect json` | Analyze the JSON currently in the workbench editors |
+| `load safe`, `load risk`, `load type` | Load a fixture into the editor without running the check |
+| `policy` | Open editable transaction and policy JSON |
+| `help`, `examples`, `status`, `report` | Display command help and local state |
+| `clear` | Clear the rendered report without changing editor inputs |
 
-Chi tiết: [`docs/01_TRIEN_KHAI_VERCEL.md`](docs/01_TRIEN_KHAI_VERCEL.md).
+Use **open editor** to paste raw transaction JSON, upload a local `.json` file (max 1 MiB), and edit the policy. Click **inspect JSON** or press **Ctrl/⌘+Enter** inside an editor. Use **copy JSON** or **export report** to extract a result. All operations take place locally in the browser.
 
-## 2. Cấu trúc repository
+**Transaction hashes are deliberately unsupported** in this release: `inspect 0x...` explains that raw transaction JSON is required. Script groups and cycle counts are not fabricated.
 
-```text
-cellguard-web/
-├── README.md                          # Điểm bắt đầu, lệnh chạy và phạm vi
-├── LICENSE                            # MIT license
-├── package.json                       # Lệnh dev/test/check; không dependency
-├── vercel.json                         # Deploy static từ site/, CSP và headers
-├── .gitignore                          # Bỏ tệp cục bộ/sensitive
-├── .github/workflows/ci.yml           # CI kiểm tra Node 22, không npm install
-├── scripts/
-│   ├── serve.mjs                       # Local static server, node built-in
-│   └── check-build.mjs                 # Kiểm tra cấu trúc và cú pháp JS
-├── site/                               # CHỈ thư mục này được deploy
-│   ├── index.html                      # Màn hình chính, semantic HTML
-│   └── assets/
-│       ├── styles.css                  # UI responsive
-│       ├── main.mjs                    # Browser events, render, export report
-│       └── lib/
-│           ├── ckb.mjs                 # CKB hex, uint64, BigInt, occupied capacity
-│           ├── policy.mjs              # Schema + kiểm tra policy
-│           ├── analyzer.mjs            # Pure deterministic rule engine
-│           └── fixtures.mjs            # Bộ giao dịch mẫu synthetic
-├── tests/
-│   ├── analyzer.test.mjs               # Unit + negative + boundary cases
-│   └── deploy.test.mjs                 # Vercel config, assets và CSP tests
-└── docs/
-    ├── 01_TRIEN_KHAI_VERCEL.md        # Hướng dẫn deploy từng bước
-    ├── 02_KIEN_TRUC_VA_CAU_TRUC_CODE.md
-    ├── 03_HUONG_DAN_KIEM_THU.md
-    ├── 04_KE_HOACH_SPARK_FUNDING.md
-    ├── 05_BAO_MAT_VA_GIOI_HAN.md
-    └── 06_ROADMAP_NEXTJS_VA_CCC.md
-```
+## Deploy to Vercel
 
-## 3. Chức năng MVP hoạt động
+1. Push the repository to GitHub.
+2. In Vercel select **Add New → Project → Import**.
+3. Leave **Root Directory** as `.`, choose **Other** for framework, set **Output Directory** to `site`.
+4. Leave Build Command unset and deploy; `vercel.json` supplies static settings and security headers.
 
-1. Load 2 fixture synthetic (`Ví dụ đạt`, `Ví dụ lỗi`), hoặc dán/upload JSON local (≤1 MiB).
-2. Parse và kiểm tra script structure `code_hash`, `hash_type`, `args`.
-3. Tính occupied capacity đúng theo `8 + lock script bytes + optional type script bytes + output data bytes`, đổi chính xác ra shannons bằng `BigInt` (1 CKB = 100,000,000 shannons).
-4. Phát hiện output capacity thấp hơn mức occupied; giới hạn output data; ngân sách capacity; allowed lock/type code hashes; policy cấm type script; cảnh báo free capacity quá lớn.
-5. Hiển thị breakdown theo output và export `cellguard-report.json`.
-6. Phân tích 100% client-side. Không kết nối ví, không tạo transaction, không gọi RPC.
+No server-side runtime or environment variables are needed. The CSP includes `connect-src 'none'`, preventing network requests by the deployed browser application. For more detailed deployment steps see [`docs/01_TRIEN_KHAI_VERCEL.md`](docs/01_TRIEN_KHAI_VERCEL.md).
 
-## 4. JSON đầu vào
+## Raw transaction input
 
-Sử dụng phần phù hợp của CKB raw transaction:
+The inspector supports the CKB raw transaction **output portion**, for example:
 
 ```json
 {
@@ -91,9 +64,13 @@ Sử dụng phần phù hợp của CKB raw transaction:
 }
 ```
 
-Script hashes trong ví dụ là **giá trị giả lập để kiểm tra format**, không phải code hash chuẩn của hệ thống CKB. Phân tích không diễn giải `inputs`, `cell_deps`, witnesses hoặc signature. Cấu trúc JSON cho CKB v0; `capacity` input là số shannons hex, không phải số CKB.
+Capacity values are hexadecimal shannons. Occupied capacity = `8 + lock script serialized field bytes + optional type script serialized field bytes + output data bytes` CKB. Outputs are limited to 512 and the web input to 1 MiB per JSON document.
 
-## 5. Policy mẫu
+**Note:** all hashes/args in synthetic examples are arbitrary testing values. The samples do not demonstrate correct inputs, witnesses, verified script execution, or chain inclusion.
+
+## Application policy
+
+`version: 1` keeps the original policy fields for compatibility and supports two optional **exact script allowlists**. Unknown keys are rejected so misspelled settings cannot silently disable intended rules.
 
 ```json
 {
@@ -105,34 +82,50 @@ Script hashes trong ví dụ là **giá trị giả lập để kiểm tra forma
   "maxFreeCapacityCKBPerOutput": "25",
   "allowedLockCodeHashes": [],
   "allowedTypeCodeHashes": [],
+  "allowedLockScripts": [
+    {
+      "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "hash_type": "type",
+      "args": "0x2222222222222222222222222222222222222222"
+    }
+  ],
+  "allowedTypeScripts": [],
   "denyTypeScripts": false
 }
 ```
 
-- `maxTotalOutputCapacityCKB` / `maxFreeCapacityCKBPerOutput`: dùng chuỗi số thập phân CKB (tối đa 8 chữ số thập phân) để tránh sai số float.
-- `allowed*CodeHashes = []`: mặc định không giới hạn. Khi thêm hash, chỉ hash được liệt kê mới hợp lệ với loại script tương ứng.
-- `POLICY_EXCESS_CAPACITY`: **warning**, không phải lỗi consensus. Việc có free capacity lớn có thể hoàn toàn có chủ ý.
-- Số lượng key bắt buộc được kiểm tra. Key lạ hiện được bỏ qua để hỗ trợ thử nghiệm; nếu định dùng policy để ký/xác nhận quyền cần nâng cấp strict-schema.
+- `allowedLockScripts` and `allowedTypeScripts` compare **all three** of `code_hash`, `hash_type`, and `args`; no implicit args wildcard is accepted.
+- `allowed*CodeHashes` are legacy code-hash-only policies and intentionally less restrictive. When both full-script and code-hash lists are configured, **both must match**.
+- Empty lists mean **no allowlist restriction**. An empty type allowlist does not require a type script; `denyTypeScripts: true` forbids type scripts.
+- All decimal CKB budget values must be nonnegative strings with at most eight fractional places.
+- A finding marked `warning` (e.g. excess free capacity) does not imply a consensus error.
 
-## 6. Điểm cần làm trước khi xin grant
+## Project files
 
-- Bổ sung một regression test dựa trên vấn đề *công khai và đã được giải quyết* của Rosen Bridge (không nhận định hệ thống hiện tại còn lỗi).
-- Kiểm thử với dữ liệu thực từ CKB testnet (đã ẩn/loại bỏ thông tin nhạy cảm).
-- Chứng minh rule engine bắt được application-policy violation mà CCC completion hoặc ckb-viz không tự gắn nhãn.
-- Xin phản hồi của ít nhất một nhà phát triển CKB độc lập, dẫn link issue hoặc comment công khai.
-- Tạo video ngắn cho reviewer xem hành vi thực tế; ghi rõ giới hạn về consensus.
+```text
+site/
+  index.html                # Accessible terminal UI, report and JSON editors
+  assets/
+    styles.css              # Responsive neon-green terminal theme
+    main.mjs                # Browser interactions; no eval, shell or RPC
+    lib/
+      terminal.mjs          # Allowlisted terminal-command parser
+      ckb.mjs               # BigInt and CKB capacity parsing
+      policy.mjs            # Strict policy validation and exact script rules
+      analyzer.mjs          # Pure offline report generator
+      fixtures.mjs          # Three synthetic samples
+scripts/
+  serve.mjs                 # Local HTTP dev server
+  check-build.mjs           # Static checks
+.github/workflows/ci.yml   # GitHub Actions Node 22 checks
+tests/                     # Unit, security regression, deployment and command tests
+vercel.json                # No-build static site + CSP
+```
 
-Chi tiết: [`docs/04_KE_HOACH_SPARK_FUNDING.md`](docs/04_KE_HOACH_SPARK_FUNDING.md).
+## Verification and roadmap
 
-## 7. Tài liệu chính thức
+Run `npm run check` to verify the deterministic analyzer, negative tests, command parser, asset syntax, and Vercel configuration. CI executes the same checks without installing dependencies.
 
-- [Vercel static deployment](https://vercel.com/docs/builds/configure-a-build)
-- [Vercel configuration](https://vercel.com/docs/project-configuration/vercel-json)
-- [CKB Cell capacity](https://pocket-node-learn-ckb.vercel.app/lessons/03-capacity-calculator)
-- [CKB Script basics](https://pocket-node-learn-ckb.vercel.app/lessons/07-script-basics)
-- [Nervos Docs](https://docs.nervos.org/)
-- [CCC SDK](https://github.com/ckb-devrel/ccc)
+A future RPC integration, if explicitly designed and opt-in, would require new CSP/network policies, chain-specific validation, independent verification against real transactions, abuse prevention, and security review. **This release remains deliberately offline and read-only.**
 
-## 8. License and development status
-
-MIT-licensed technical prototype, version 0.1.0. No published web URL is claimed and no third-party installation is required for browser deployment. All grant figures in the docs are **illustrative proposals**, not funding approvals.
+More documents are in `docs/`. The repository is an MIT-licensed experimental developer tool, not an audit certificate or funding approval.

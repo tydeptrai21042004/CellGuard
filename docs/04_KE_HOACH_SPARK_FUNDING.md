@@ -54,7 +54,7 @@ Repository này đã triển khai **một phần** các deliverables trên ở m
 
 ## 5. Công việc nên làm tiếp theo để tăng tính khác biệt
 
-1. Bổ sung JSON schema có version và strict validation, test thay đổi policy migration.
+1. [Partially implemented in v0.2] Strict v1 policy-key validation and exact script matching with regression tests. Remaining: formal schema publication, migration/version testing and external review.
 2. Hoàn thiện import từ CCC constructed transaction (các field đã chuẩn hóa), bảo đảm input không bị mất nghĩa.
 3. Đối chiếu occupied-capacity với CCC trên dataset thật.
 4. Thêm policy hash và report provenance để có thể kiểm tra reproducibility giữa các máy (không tự nhận là attestation cryptographic cho security audit).

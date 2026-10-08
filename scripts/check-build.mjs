@@ -7,7 +7,8 @@ const required = [
   'vercel.json', 'site/index.html', 'site/assets/main.mjs',
   'site/assets/styles.css', 'site/assets/lib/ckb.mjs',
   'site/assets/lib/policy.mjs', 'site/assets/lib/analyzer.mjs',
-  'site/assets/lib/fixtures.mjs', 'docs/01_TRIEN_KHAI_VERCEL.md'
+  'site/assets/lib/fixtures.mjs', 'site/assets/lib/terminal.mjs',
+  '.github/workflows/ci.yml', '.gitignore', 'docs/01_TRIEN_KHAI_VERCEL.md'
 ];
 for (const path of required) {
   if (!existsSync(join(root, path))) throw new Error(`Missing deployment file: ${path}`);
