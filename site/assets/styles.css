@@ -211,3 +211,20 @@ button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 2px
 [hidden] { display: none !important; }
 
 .finding p.finding-tip { color: var(--cyan); opacity: .88; }
+
+/* v0.4 read-only network verification */
+.online-panel { padding: 18px 0; margin-top: 14px; border-top: 1px dashed var(--line); }
+.online-panel h2:before { content: '> '; color: var(--cyan); }
+.online-note { color: var(--muted); font-size: 12px; line-height: 1.6; max-width: 970px; }
+.online-actions { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; margin: 12px 0; }
+.online-actions label,.online-lookup label { font-size: 11px; color: #bbd3c3; }
+.online-actions select,.online-actions input { color: #d9f2de; background: var(--field); border: 1px solid var(--line-bright); border-radius: 5px; padding: 10px; min-width: 140px; }
+.online-lookup { margin-top: 18px; font-size: 12px; }
+.online-lookup input { min-width: min(100%, 360px); flex: 1; max-width: 660px; }
+.online-details { border: 1px solid var(--line); background: var(--panel); border-radius: 7px; margin-top: 10px; padding: 12px; font-size: 12px; overflow-wrap: anywhere; }
+.online-details p { margin: 7px 0; }
+.online-details strong { color: #d1edd9; }
+.online-details .online-warning { color: var(--amber); }
+.online-details .online-error { color: var(--red); }
+.online-details .online-ok { color: var(--green); }
+@media (max-width: 640px) { .online-actions { align-items: stretch; } .online-actions input { min-width: 100%; } }

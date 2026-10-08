@@ -1,3 +1,17 @@
+## NEW in v0.4: live, read-only CKB verification
+
+CellGuard now has an optional Node/Vercel backend (`/api/verify`) that queries CKB mainnet/testnet for input-cell liveness, exact fees, VM script execution / witness acceptance, `test_tx_pool_accept` (no broadcast), and existing transaction confirmation status. Offline policy inspection remains available without a network connection. **Node preflight is not independent consensus proof or on-chain finality.**
+
+For complete deployment, API security, CLI and real browser E2E instructions, see [docs/09_LIVE_CKB_RPC_AND_E2E.md](docs/09_LIVE_CKB_RPC_AND_E2E.md).
+
+```bash
+npm run check
+npm run dev
+# Optional real-browser UI tests: npm run test:e2e (requires Python Playwright and Chromium)
+```
+
+---
+
 # CellGuard — Browser Transaction Policy Terminal
 
 A **terminal-style web interface plus real Node CLI** for offline CKB transaction-output inspection and application policy preflight. Browser prompt commands never execute system shell commands. `cli/cellguard.mjs` is an actual command-line tool intended for CI checks.

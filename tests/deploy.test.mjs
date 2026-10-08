@@ -3,16 +3,16 @@ import assert from 'node:assert/strict';
 import { readFileSync, existsSync } from 'node:fs';
 
 const config = JSON.parse(readFileSync(new URL('../vercel.json', import.meta.url), 'utf8'));
-test('Vercel deploys only the static site folder, no build step', () => {
+test('Vercel builds frontend assets without a custom build step', () => {
   assert.equal(config.framework, null);
   assert.equal(config.outputDirectory, 'site');
   assert.equal(config.buildCommand, null);
   assert.equal(config.installCommand, '');
 });
-test('security headers avoid remote connections and inline scripts', () => {
+test('security headers restrict XHR to same-origin serverless API', () => {
   const h = config.headers.flatMap(item => item.headers);
   const csp = h.find(v => v.key === 'Content-Security-Policy')?.value;
-  assert.match(csp, /connect-src 'none'/);
+  assert.match(csp, /connect-src 'self'/);
   assert.match(csp, /script-src 'self'/);
   assert.match(csp, /frame-ancestors 'none'/);
 });

@@ -2,6 +2,7 @@ import { analyzeTransaction } from './lib/analyzer.mjs';
 import { DEFAULT_POLICY, V2_POLICY } from './lib/policy.mjs';
 import { parseStrictJSON, MAX_JSON_BYTES } from './lib/strict-json.mjs';
 import { compareTransactions } from './lib/diff.mjs';
+import { parseTransaction } from './lib/ckb.mjs';
 import { SAFE_TRANSACTION, RISK_TRANSACTION, TYPE_TRANSACTION, DEMO_POLICY } from './lib/fixtures.mjs';
 import { parseTerminalCommand } from './lib/terminal.mjs';
 
@@ -32,6 +33,9 @@ let undoReplacement = null;
 let editRevision = 0;
 let uploadSequence = 0;
 let currentReport = null;
+let pendingNetwork = null;
+let onlineRevision = 0;
+let currentOnlineReport = null;
 let currentSource = 'synthetic safe fixture';
 const history = [];
 let historyIndex = 0;
@@ -61,6 +65,25 @@ function statusView(kind, heading, message) {
   const content = text('div', 'status-content');
   content.append(text('strong', '', heading), text('p', '', message));
   status.append(icon, content);
+}
+function onlineStatus(kind, heading, message) {
+  const el = $('online-status');
+  el.className = `status ${kind}`;
+  el.replaceChildren();
+  const marker = text('span', 'status-icon', kind === 'pass' ? '✓' : kind === 'fail' ? '×' : kind === 'warn' ? '!' : 'i');
+  marker.setAttribute('aria-hidden', 'true');
+  const content = text('div', 'status-content');
+  content.append(text('strong', '', heading), text('p', '', message));
+  el.append(marker, content);
+}
+function invalidateOnline() {
+  onlineRevision++;
+  if (pendingNetwork) { pendingNetwork.abort(); pendingNetwork = null; }
+  currentOnlineReport = null;
+  if (['online-preflight', 'chain-lookup'].includes(currentReport?.mode)) { currentReport = null; copy.disabled = true; download.disabled = true; }
+  $('online-details').replaceChildren(); $('online-details').hidden = true;
+  $('verify-online').disabled = false; $('lookup-online').disabled = false; $('cancel-online').disabled = true;
+  onlineStatus('idle', 'Awaiting live verification', 'Previous RPC result cleared because the request or network changed.');
 }
 function invalidateReport() {
   currentReport = null;
@@ -93,6 +116,7 @@ function applyReplacement(nextTx, nextPolicy, label, { ask = true } = {}) {
   policyInput.value = nextPolicy;
   lastLoadedTexts = { tx: nextTx, policy: nextPolicy };
   editRevision++;
+  invalidateOnline();
   updateSource(label);
   invalidateReport();
   return true;
@@ -111,6 +135,7 @@ function undoLastReplacement() {
   policyInput.value = before.policy;
   lastLoadedTexts = { tx: before.tx, policy: before.policy };
   editRevision++;
+  invalidateOnline();
   updateSource(before.source);
   invalidateReport();
   return true;
@@ -202,7 +227,7 @@ function renderReport(report, durationMs) {
     [report.checks.capacity ? 'good' : 'error', `capacity checks: ${report.checks.capacity ? 'ok' : 'failed'}`],
     [report.checks.lockPolicy ? 'good' : 'error', `lock policy: ${report.checks.lockPolicy ? 'ok' : 'failed'}`],
     [report.checks.typePolicy ? 'good' : 'error', `type policy: ${report.checks.typePolicy ? 'ok' : 'failed'}`],
-    ['warning', 'verification: NOT VERIFIED on chain (no RPC, signatures, input or VM execution)']
+    ['warning', 'offline results only; use verify json for RPC input/fee/VM analysis']
   ];
   promptEcho($('command-input').value.trim() || 'inspect json', lines);
 }
@@ -215,7 +240,7 @@ function applyFindingFilter() {
 }
 function renderDiff(report) {
   invalidateReport();
-  currentReport = { ...report, source: currentSource, analyzerVersion: '0.3.0', generatedAt: new Date().toISOString() };
+  currentReport = { ...report, source: currentSource, analyzerVersion: '0.4.0', generatedAt: new Date().toISOString() };
   copy.disabled = false;
   download.disabled = false;
   statusView(report.changeCount ? 'warn' : 'pass',
@@ -234,7 +259,86 @@ function renderDiff(report) {
   scope.hidden = false;
   promptEcho('diff', [['good', `comparison complete: ${report.changeCount} changes`], ['warning', 'not an on-chain, input or witness comparison']]);
 }
+function renderOnlineReport(report) {
+  const details = $('online-details'); details.replaceChildren(); details.hidden = false;
+  const kind = report.status === 'committed' || report.status === 'pass' ? 'pass'
+    : ['fail', 'rejected', 'reorg-risk'].includes(report.status) ? 'fail' : 'warn';
+  onlineStatus(kind, `${report.mode === 'chain-lookup' ? 'RPC transaction status' : 'Live preflight'}: ${report.status.toUpperCase()}`,
+    `Network ${report.network} · reported chain ${report.chain} · tip ${report.tip.number} · ${report.observedAt}`);
+  const rows = report.mode === 'chain-lookup'
+    ? [['Transaction hash', report.hash], ['Block', report.blockHash ?? 'not committed'],
+       ['Confirmations', report.confirmations ?? 'not confirmed'], ['Inclusion proof', report.proof ? `${report.proof.status} · ${report.proof.reason}` : 'not available']]
+    : [['Input cells', `${report.liveInputCount}/${report.inputCount} live`],
+       ['Input capacity', report.inputCapacityCKB === null ? 'unresolved' : `${report.inputCapacityCKB} CKB`],
+       ['Output capacity', `${report.outputCapacityCKB} CKB`],
+       ['Transaction fee', report.feeCKB === null ? 'unresolved' : `${report.feeCKB} CKB`],
+       ['CKB VM', `${report.scripts.status} · ${report.scripts.method ?? 'not executed'}`],
+       ['VM cycles', report.scripts.cycles ?? 'not available'],
+       ['Node txpool acceptance', `${report.txPool.status} · ${report.txPool.reason}`],
+       ['Witness / signature status', report.checks.lockWitnesses.replaceAll('-', ' ')],
+       ['On-chain inclusion/finality', 'not established by preflight; use hash lookup after submission']];
+  for (const [name, value] of rows) {
+    const line = text('p');
+    line.append(text('strong', '', name + ': '), text('span', '', value));
+    details.append(line);
+  }
+  for (const item of report.findings ?? []) details.append(text('p', `online-${item.severity === 'error' ? 'error' : 'warning'}`, `${item.severity.toUpperCase()} ${item.code}: ${item.detail}`));
+  details.append(text('p', 'online-warning', `LIMITATION: ${report.limitations}`));
+  promptEcho(report.mode === 'chain-lookup' ? 'lookup' : 'verify json', [
+    [kind === 'pass' ? 'good' : kind === 'fail' ? 'error' : 'warning', `read-only ${report.network} RPC: ${report.status}`],
+    ['plain', report.mode === 'online-preflight' ? `inputs ${report.liveInputCount}/${report.inputCount}; fee ${report.feeCKB ?? '?'} CKB; VM ${report.scripts.status}; pool ${report.txPool.status}; cycles ${report.scripts.cycles ?? '?'}` : `tx status ${report.status}; confirmations ${report.confirmations ?? '?'}`],
+    ['warning', 'No transaction submitted; RPC evidence is not independent chain validation']
+  ]);
+}
+async function callLiveApi(action, payload) {
+  if (pendingNetwork) pendingNetwork.abort();
+  const controller = new AbortController(); pendingNetwork = controller;
+  const snapshot = ++onlineRevision;
+  $('verify-online').disabled = true; $('lookup-online').disabled = true; $('cancel-online').disabled = false;
+  onlineStatus('idle', 'Querying CKB node…', 'Requesting chain data from the configured read-only RPC. No transaction is broadcast.');
+  try {
+    const response = await fetch('/api/verify', {
+      method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, network: $('network-select').value, ...payload }), signal: controller.signal
+    });
+    const result = await response.json();
+    if (snapshot !== onlineRevision) return;
+    if (!response.ok || result.error) throw new Error(`${result.error?.code ?? 'HTTP_' + response.status}: ${result.error?.message ?? 'Request failed'}`);
+    currentOnlineReport = result;
+    currentReport = { ...result, analyzerVersion: '0.4.0' };
+    copy.disabled = false; download.disabled = false;
+    renderOnlineReport(result);
+  } catch (error) {
+    if (snapshot !== onlineRevision) return;
+    const message = error instanceof Error ? error.message : 'Network request failed';
+    onlineStatus('fail', 'Live verification unavailable', message);
+    $('online-details').replaceChildren(); $('online-details').hidden = true;
+    promptEcho(action === 'lookup' ? 'lookup' : 'verify json', [['error', message], ['warning', 'RPC failed or was unreachable; do not infer transaction invalidity from a connectivity error']]);
+  } finally {
+    if (snapshot === onlineRevision) {
+      pendingNetwork = null;
+      $('verify-online').disabled = false; $('lookup-online').disabled = false; $('cancel-online').disabled = true;
+    }
+  }
+}
+function verifyOnline() {
+  try {
+    const tx = parseJSON(txInput.value, 'Transaction JSON');
+    const policy = parseJSON(policyInput.value, 'Policy JSON');
+    parseTransaction(tx, { strict: true });
+    if (!Array.isArray(tx.inputs) || !tx.inputs.length) throw new Error('Synthetic fixture has no input cells. Paste a complete signed CKB transaction first.');
+    if (JSON.stringify(tx).length > 262144) throw new Error('Online transaction exceeds 256 KiB');
+    void callLiveApi('verify', { transaction: tx, policy });
+  } catch (error) { onlineStatus('fail', 'Cannot verify transaction', error instanceof Error ? error.message : 'Invalid JSON'); }
+}
+function lookupOnline(hash = $('lookup-hash').value.trim()) {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) { onlineStatus('fail', 'Invalid transaction hash', 'Expected 0x followed by 64 hex characters.'); return; }
+  $('lookup-hash').value = hash;
+  void callLiveApi('lookup', { hash });
+}
+
 function doInspect(command, fixtureName) {
+  invalidateOnline();
   if (fixtureName !== 'json' && !fixture(fixtureName)) {
     promptEcho(command, [['warning', 'fixture replacement canceled; existing editor content preserved']]);
     return;
@@ -242,7 +346,7 @@ function doInspect(command, fixtureName) {
   const start = performance.now();
   const report = analyzeTransaction(parseJSON(txInput.value, 'Transaction JSON'), parseJSON(policyInput.value, 'Policy JSON'));
   const elapsed = performance.now() - start;
-  currentReport = { ...report, analyzerVersion: '0.3.0', source: currentSource, generatedAt: new Date().toISOString() };
+  currentReport = { ...report, analyzerVersion: '0.4.0', source: currentSource, generatedAt: new Date().toISOString() };
   download.disabled = false;
   copy.disabled = false;
   renderReport(currentReport, elapsed);
@@ -263,6 +367,12 @@ function runCommand(raw) {
   try { parsed = parseTerminalCommand(command); }
   catch (error) { promptEcho('command', [['error', error instanceof Error ? error.message : 'Invalid command']]); return; }
   switch (parsed.action) {
+    case 'verify-online':
+      verifyOnline(); break;
+    case 'lookup-online':
+      lookupOnline(parsed.hash); break;
+    case 'lookup-invalid':
+      onlineStatus('fail', 'Invalid lookup', 'Use lookup 0x followed by 64 hex characters.'); break;
     case 'inspect':
       try { doInspect(command, parsed.fixture); }
       catch (error) {
@@ -307,6 +417,8 @@ function runCommand(raw) {
         ['plain', 'inspect json                analyze transaction.json and policy.json'],
         ['plain', 'load safe | risk | type     load example without running'],
         ['plain', 'load strict                  use v2 strict policy, keeping transaction'],
+        ['plain', 'verify json                  run live CKB input/fee/script verification'],
+        ['plain', 'lookup 0x<64 hex>            query transaction confirmation status'],
         ['plain', 'diff                         compare current JSON with comparison editor'],
         ['plain', 'undo                         restore editor before last replacement'],
         ['plain', 'policy                      open editable JSON workbench'],
@@ -314,7 +426,7 @@ function runCommand(raw) {
         ['plain', 'status                      show verification coverage'],
         ['plain', 'report                      show last report availability'],
         ['plain', 'clear                       clear the current report'],
-        ['warning', 'Hash lookup and cycle counts are unavailable offline. No on-chain validity is asserted.']
+        ['warning', 'Node txpool preflight ≠ confirmed transaction; provide complete signed JSON for live checks.']
       ]);
       break;
     case 'policy':
@@ -325,13 +437,10 @@ function runCommand(raw) {
       promptEcho(command, [['plain', 'inspect safe  — capacity + full lock script match pass'], ['plain', 'inspect risk  — low capacity, excessive data, forbidden lock'], ['plain', 'inspect type  — output containing a type script'], ['comment', 'all three are synthetic, not confirmed testnet transactions']]);
       break;
     case 'status':
-      promptEcho(command, [['good', 'mode: offline browser preflight'], ['plain', 'covered: output structure, occupied capacity, configured policy'], ['warning', 'not verified: tx hash lookup, chain state, input cells, fees, witnesses, signature validity, CKB-VM, cycles'], ['comment', 'network: none · wallet: none · server storage: none']]);
+      promptEcho(command, [['good', 'mode: offline policy + optional read-only live CKB RPC'], ['plain', 'local: output structure, occupied capacity, configured policy'], ['plain', 'online: chain network, inputs, fees, VM, node txpool acceptance, existing tx hash status'], ['warning', 'not verified: independent consensus proofs, all custom signature semantics, future txpool acceptance'], ['comment', 'no wallet, no signing, no broadcasting · online transaction data is shared with RPC']]);
       break;
     case 'report':
       promptEcho(command, [['plain', currentReport ? currentReport.mode === 'indexed-output-diff' ? `comparison report ready: ${currentReport.changeCount} indexed changes` : `policy report ready: ${currentReport.result} (${currentReport.outputCount} outputs)` : 'no report · run inspect first'], ['comment', 'use copy JSON or export report after an analysis']]);
-      break;
-    case 'hash-unsupported':
-      promptEcho(command, [['error', 'error: transaction-hash lookup is unavailable in offline mode'], ['comment', 'paste the raw transaction JSON into the workbench and run inspect json'], ['warning', 'CellGuard deliberately does not invent block height, script cycles, or RPC results']]);
       break;
     default:
       promptEcho(command, [['error', `unknown command: ${parsed.input}`], ['comment', 'type help to see supported commands; no OS shell is executed']]);
@@ -357,13 +466,18 @@ $('reset-policy').addEventListener('click', () => {
     promptEcho('policy reset', [['warning', 'policy reset to unrestricted defaults; configure allowlists before enforcement']]);
   }
 });
-txInput.addEventListener('input', () => { editRevision++; updateSource('edited transaction JSON'); invalidateReport(); });
-policyInput.addEventListener('input', () => { editRevision++; invalidateReport(); });
+txInput.addEventListener('input', () => { editRevision++; invalidateOnline(); updateSource('edited transaction JSON'); invalidateReport(); });
+policyInput.addEventListener('input', () => { editRevision++; invalidateOnline(); invalidateReport(); });
 compareInput.addEventListener('input', () => { if (currentReport?.mode === 'indexed-output-diff') invalidateReport(); });
 filterInput.addEventListener('input', applyFindingFilter);
 $('load-strict').addEventListener('click', () => runCommand('load strict'));
 $('run-diff').addEventListener('click', () => runCommand('diff'));
 $('undo-replace').addEventListener('click', () => runCommand('undo'));
+$('verify-online').addEventListener('click', verifyOnline);
+$('lookup-online').addEventListener('click', () => lookupOnline());
+$('network-select').addEventListener('change', invalidateOnline);
+$('lookup-hash').addEventListener('input', () => { if (currentOnlineReport?.mode === 'chain-lookup') invalidateOnline(); });
+$('cancel-online').addEventListener('click', invalidateOnline);
 $('compare-current').addEventListener('click', () => {
   if (compareInput.value.trim() && compareInput.value !== txInput.value && !window.confirm('Replace the comparison baseline with the current transaction?')) return;
   compareInput.value = txInput.value;

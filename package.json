@@ -1,14 +1,15 @@
 {
   "name": "cellguard-web",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
-  "description": "Terminal-style, offline, browser-first CKB policy preflight",
+  "description": "Terminal-style CKB policy preflight and read-only live CKB RPC verification",
   "engines": { "node": ">=20" },
   "scripts": {
     "dev": "node scripts/serve.mjs",
     "test": "node --test tests/*.test.mjs",
     "cli": "node cli/cellguard.mjs",
+    "test:e2e": "python3 tests/browser-e2e.py",
     "check": "node scripts/check-build.mjs && node --test tests/*.test.mjs"
   },
   "license": "MIT"

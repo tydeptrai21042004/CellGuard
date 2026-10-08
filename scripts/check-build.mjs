@@ -9,7 +9,7 @@ const required = [
   'site/assets/lib/policy.mjs', 'site/assets/lib/analyzer.mjs',
   'site/assets/lib/fixtures.mjs', 'site/assets/lib/terminal.mjs',
   'site/assets/lib/diff.mjs', 'site/assets/lib/strict-json.mjs',
-  'cli/cellguard.mjs', '.github/workflows/ci.yml', '.gitignore',
+  'cli/cellguard.mjs', 'api/verify.mjs', 'server/http.mjs', 'server/rpc.mjs', 'server/verification.mjs', '.github/workflows/ci.yml', '.gitignore',
   'examples/safe-tx.json', 'examples/strict-policy.json', 'docs/01_TRIEN_KHAI_VERCEL.md'
 ];
 for (const path of required) {

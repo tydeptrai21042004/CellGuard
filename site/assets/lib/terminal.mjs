@@ -1,4 +1,4 @@
-/** Command grammar is deliberately small: no eval, shell, file access or network calls. */
+/** Closed command grammar; online commands invoke only CellGuard's read-only API. */
 export function parseTerminalCommand(raw) {
   if (typeof raw !== 'string' || raw.length > 4096) throw new Error('Command exceeds 4096 characters');
   const text = raw.trim();
@@ -16,11 +16,14 @@ export function parseTerminalCommand(raw) {
   if (normalized === 'load safe' || normalized === 'load risk' || normalized === 'load type') {
     return { action: 'load', fixture: normalized.slice(5) };
   }
+  if (normalized === 'verify' || normalized === 'verify json') return { action: 'verify-online' };
+  if (normalized === 'lookup' || (normalized.startsWith('lookup ') && !/^lookup 0x[0-9a-f]{64}$/.test(normalized))) return { action: 'lookup-invalid' };
+  if (/^lookup 0x[0-9a-f]{64}$/.test(normalized)) return { action: 'lookup-online', hash: normalized.slice(7) };
   if (normalized === 'inspect' || normalized === 'run') return { action: 'inspect', fixture: 'json' };
   const match = /^(inspect|run) (safe|risk|risky|type|json)$/.exec(normalized);
   if (match) return { action: 'inspect', fixture: match[2] === 'risky' ? 'risk' : match[2] };
   if (/\b0x[0-9a-f]{64}\b/i.test(text) || /^(inspect|run)\s+0x/i.test(text)) {
-    return { action: 'hash-unsupported' };
+    return { action: 'lookup-invalid' };
   }
   return { action: 'unknown', input: text.slice(0, 120) };
 }

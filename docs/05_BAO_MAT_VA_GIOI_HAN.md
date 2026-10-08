@@ -1,3 +1,5 @@
+> **Version note (v0.4):** This document describes the earlier offline functionality. Live read-only CKB RPC preflight, transaction lookup and browser testing were added in v0.4; see [09_LIVE_CKB_RPC_AND_E2E.md](09_LIVE_CKB_RPC_AND_E2E.md). The offline tools remain supported.
+
 # 05 — Bảo mật, edge cases và giới hạn hiện tại
 
 ## 1. Threat model

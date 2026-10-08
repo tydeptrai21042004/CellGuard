@@ -18,8 +18,8 @@ for (const [input, action, fixture] of [
     assert.deepEqual(parseTerminalCommand(input), fixture ? { action, fixture } : { action });
   });
 }
-test('hash argument fails explicitly rather than pretending an RPC lookup', () => {
-  assert.equal(parseTerminalCommand('inspect 0x' + 'a'.repeat(64)).action, 'hash-unsupported');
+test('bare hash is not silently interpreted as a lookup', () => {
+  assert.equal(parseTerminalCommand('inspect 0x' + 'a'.repeat(64)).action, 'lookup-invalid');
 });
 test('arbitrary shell-like commands cannot execute', () => {
   assert.equal(parseTerminalCommand('rm -rf /').action, 'unknown');
