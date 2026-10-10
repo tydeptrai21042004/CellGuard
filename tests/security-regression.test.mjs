@@ -9,7 +9,7 @@ const codes = report => report.findings.map(item => item.code);
 
 test('policy schema fails closed on misspelled keys', () => {
   assert.throws(() => parsePolicy({ ...DEFAULT_POLICY, maxOutputz: 1 }), /unknown field: maxOutputz/);
-  assert.throws(() => parsePolicy(JSON.parse(JSON.stringify(DEFAULT_POLICY).replace('"maxOutputs"', '"maxOutputz"'))), /thiếu trường maxOutputs/);
+  assert.throws(() => parsePolicy(JSON.parse(JSON.stringify(DEFAULT_POLICY).replace('"maxOutputs"', '"maxOutputz"'))), /missing field maxOutputs/);
 });
 test('backward compatible v1 policies may omit new exact-script fields', () => {
   const policy = clone(DEFAULT_POLICY);

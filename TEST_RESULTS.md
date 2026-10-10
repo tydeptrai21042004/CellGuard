@@ -1,11 +1,22 @@
-# CellGuard v0.4 verification (2026-10-08)
+# CellGuard v0.5 automated test report
 
-## Automated local checks
+Source baseline: user-uploaded `CellGuard-main(3).zip`. Local runtime: Node.js 22.x, Python 3.13, Playwright Chromium.
 
-- `npm run check` — **PASS**, 85/85 Node tests. Tests cover legacy policy behavior, strict JSON, exact integer capacity, input/fee processing, chain/network mismatch, VM success/rejection/unavailability, non-broadcast `test_tx_pool_accept` success/rejection, RPC method allowlisting, transaction inclusion status, RPC proof assertions, fee mismatch and fallback methods.
-- `npm run test:e2e` — **PASS**, real Chromium DOM and event interactions, real Node backend, read-only JSON RPC routed to a deterministic local mock node, Node CLI online mode. Tests cover successful and failed VM execution, txpool acceptance, fee and cycle display, committed lookup + node proof, editor invalidation and network switching.
-- Local runtime: Node.js 22, Python Playwright installed and system Chromium available.
+## Verified
 
-**Environment limitation:** This execution environment blocks Chromium's navigation to loopback ports with `ERR_BLOCKED_BY_ADMINISTRATOR`. The E2E suite detected this and executed the unchanged CellGuard browser logic in real Chromium DOM, using a Python-to-Node-API bridge to the actual local server and mock upstream RPC. This is genuine browser event testing, but **not** a full direct-Chromium HTTP navigation test here. GitHub Actions includes a job that executes standard direct navigation on a normal runner.
+- `npm run check`: **PASS** — static deploy checks plus 108/108 Node.js tests.
+- `npm run test:e2e`: **PASS** — Chromium UI interactions, CLI invocation and the Node API connected to a deterministic mock CKB RPC.
+- This runtime blocked Chromium HTTP navigation to loopback (`ERR_BLOCKED_BY_ADMINISTRATOR`), so the E2E harness exercised the actual Chromium DOM/JavaScript while bridging requests to the running local Node API. It is not a direct-Chromium HTTP-navigation test in this environment.
+- V1/V2 compatibility: PASS.
+- V3 capacity invariants, authorized roles, required dependencies, `since` format, unverified-input CI exit codes: PASS.
+- 474 CKB unauthorized finalizer gain (synthetic scenario): PASS, detected by two independent profile rules.
+- Live RPC verification and historical audit with injected **mock RPC**: PASS.
+- The repository's missing CI workflow and `.gitignore` were added and the build checker now passes.
 
-**Not tested:** No real mainnet/testnet signed transaction was queried or submitted; public CKB RPC provider support, Vercel cloud deployment, external production rate limiting, and independent signature/consensus validation are not proven by these local tests. `test_tx_pool_accept` preflights current-node acceptance, not real on-chain inclusion or future acceptance. The product does not sign or broadcast transactions.
+## Not verified
+
+- Actual public CKB Testnet transaction or Rick's original CrowdCell bug transaction.
+- Public RPC provider compatibility, Vercel cloud deployment and production application integration.
+- Independent consensus/SPV verification, historical VM replay, and security/contract audit.
+
+The code does not sign or broadcast transactions. Online signed transaction preflight shares witness data with the configured RPC node.

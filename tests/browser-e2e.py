@@ -26,7 +26,7 @@ def make_browser_bundle():
     # Small *test-only* ESM concatenator for this dependency-free project. Runs the
     # actual browser JS on about:blank when sandbox policy blocks loopback navigation.
     folder = ROOT / 'site' / 'assets'
-    modules = ['ckb','policy','strict-json','analyzer','diff','fixtures','terminal']
+    modules = ['ckb','policy','strict-json','invariants','analyzer','diff','fixtures','terminal']
     chunks = ['(function () {', 'const MODULE = Object.create(null);']
     for name in modules:
         source = (folder / 'lib' / (name + '.mjs')).read_text()

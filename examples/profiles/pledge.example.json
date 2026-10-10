@@ -1,0 +1,38 @@
+{
+  "version": 3,
+  "profile": "crowdcell-pledge-example",
+  "strictTransactionShape": true,
+  "roles": {
+    "contributor": {
+      "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "hash_type": "type",
+      "args": "0xdddddddddddddddddddddddddddddddddddddddd"
+    },
+    "campaign": {
+      "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "hash_type": "type",
+      "args": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  },
+  "allowedInputRoles": [
+    "contributor"
+  ],
+  "allowedOutputRoles": [
+    "campaign",
+    "contributor"
+  ],
+  "maxFeeCKB": "0.1",
+  "capacityFlow": [
+    {
+      "id": "pledge-beneficiary",
+      "kind": "min-recipient-net-gain",
+      "source": "contributor",
+      "destinations": [
+        "campaign"
+      ],
+      "minRatio": "1",
+      "feeAllowanceCKB": "0.1",
+      "minSourceInputCKB": "1"
+    }
+  ]
+}

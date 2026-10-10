@@ -1,4 +1,4 @@
-import { verifyTransactionOnline, lookupTransactionOnline, ONLINE_LIMIT, VerificationError } from './verification.mjs';
+import { verifyTransactionOnline, lookupTransactionOnline, auditCommittedTransactionOnline, ONLINE_LIMIT, VerificationError } from './verification.mjs';
 import { createRpc } from './rpc.mjs';
 import { parseStrictJSON } from '../site/assets/lib/strict-json.mjs';
 
@@ -8,9 +8,9 @@ export function checkOrigin(origin, host) {
   catch { return false; }
 }
 export async function handleVerify(body, rpcFactory = createRpc) {
-  if (!body || typeof body !== 'object' || Array.isArray(body) || !['verify', 'lookup'].includes(body.action)) throw new VerificationError('BAD_ACTION', 'Expected verify or lookup');
+  if (!body || typeof body !== 'object' || Array.isArray(body) || !['verify', 'lookup', 'audit'].includes(body.action)) throw new VerificationError('BAD_ACTION', 'Expected verify, lookup or audit');
   const rpc = rpcFactory(body.network);
-  return body.action === 'verify' ? verifyTransactionOnline(body, rpc) : lookupTransactionOnline(body, rpc);
+  return body.action === 'verify' ? verifyTransactionOnline(body, rpc) : body.action === 'audit' ? auditCommittedTransactionOnline(body, rpc) : lookupTransactionOnline(body, rpc);
 }
 export function sanitizeError(error) {
   if (error?.code === 'BAD_JSON' || error?.name === 'SyntaxError') return { status: 400, body: { error: { code: 'BAD_JSON', message: 'Invalid JSON request' } } };

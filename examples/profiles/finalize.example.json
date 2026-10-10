@@ -1,0 +1,59 @@
+{
+  "version": 3,
+  "profile": "crowdcell-finalize-example",
+  "strictTransactionShape": true,
+  "roles": {
+    "campaign": {
+      "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "hash_type": "type",
+      "args": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "beneficiary": {
+      "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "hash_type": "type",
+      "args": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    },
+    "finalizer": {
+      "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "hash_type": "type",
+      "args": "0xcccccccccccccccccccccccccccccccccccccccc"
+    }
+  },
+  "allowedOutputRoles": [
+    "beneficiary",
+    "finalizer"
+  ],
+  "allowedInputRoles": [
+    "campaign",
+    "finalizer"
+  ],
+  "capacityFlow": [
+    {
+      "id": "preserve-campaign",
+      "kind": "min-recipient-net-gain",
+      "source": "campaign",
+      "destinations": [
+        "beneficiary"
+      ],
+      "minRatio": "1",
+      "feeAllowanceCKB": "0.1",
+      "minSourceInputCKB": "1"
+    },
+    {
+      "id": "no-finalizer-profit",
+      "kind": "max-net-gain",
+      "role": "finalizer",
+      "maxGainCKB": "0"
+    }
+  ],
+  "maxFeeCKB": "0.1",
+  "requiredCellDeps": [
+    {
+      "out_point": {
+        "tx_hash": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "index": "0x0"
+      },
+      "dep_type": "code"
+    }
+  ]
+}

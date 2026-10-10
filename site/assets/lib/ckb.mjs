@@ -8,25 +8,25 @@ export function isRecord(value) {
 }
 export function parseHexBytes(value, field = 'hex') {
   if (typeof value !== 'string' || !/^0x(?:[0-9a-fA-F]{2})*$/.test(value)) {
-    throw new Error(`${field}: cần chuỗi hex 0x với số chữ số chẵn`);
+    throw new Error(`${field}: expected 0x-prefixed hex string with an even number of digits`);
   }
   return (value.length - 2) / 2;
 }
 export function parseU64Hex(value, field = 'capacity') {
   if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{1,16}$/.test(value)) {
-    throw new Error(`${field}: cần số nguyên u64 dạng hex (0x...)`);
+    throw new Error(`${field}: expected u64 hexadecimal integer (0x...)`);
   }
   const number = BigInt(value);
-  if (number > MAX_U64) throw new Error(`${field}: vượt giới hạn u64`);
+  if (number > MAX_U64) throw new Error(`${field}: exceeds u64 maximum`);
   return number;
 }
 export function parseCkbDecimal(value, field = 'amount') {
   if (typeof value !== 'string' || !/^(0|[1-9][0-9]*)(?:\.[0-9]{1,8})?$/.test(value)) {
-    throw new Error(`${field}: số CKB phải là chuỗi thập phân không âm, tối đa 8 chữ số lẻ`);
+    throw new Error(`${field}: expected nonnegative decimal CKB string with up to 8 fractional digits`);
   }
   const [whole, fractional = ''] = value.split('.');
   const result = BigInt(whole) * SHANNONS_PER_CKB + BigInt((fractional + '00000000').slice(0, 8));
-  if (result > MAX_U64) throw new Error(`${field}: vượt giới hạn u64`);
+  if (result > MAX_U64) throw new Error(`${field}: exceeds u64 maximum`);
   return result;
 }
 export function formatCkb(value) {
@@ -61,12 +61,12 @@ function parseOutPoint(value, field, ignored) {
   return `${value.tx_hash.toLowerCase()}:${index}`;
 }
 export function validateScript(value, field, options = {}) {
-  if (!isRecord(value)) throw new Error(`${field}: script phải là object`);
+  if (!isRecord(value)) throw new Error(`${field}: script must be an object`);
   if (typeof value.code_hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(value.code_hash)) {
-    throw new Error(`${field}.code_hash: phải đúng 32 byte`);
+    throw new Error(`${field}.code_hash: expected exactly 32 bytes`);
   }
   if (!SUPPORTED_HASH_TYPES.includes(value.hash_type)) {
-    throw new Error(`${field}.hash_type: không hợp lệ`);
+    throw new Error(`${field}.hash_type: invalid hash type`);
   }
   const ignored = options.ignored ?? [];
   unknownProperties(value, ['code_hash', 'hash_type', 'args'], field, options.strict === true, ignored);
@@ -86,15 +86,15 @@ export function parseTransaction(value, options = {}) {
   if (isRecord(value)) {
     unknownProperties(value, ['version', 'cell_deps', 'header_deps', 'inputs', 'outputs', 'outputs_data', 'witnesses'], 'transaction', strict, ignoredFields);
   }
-  if (!isRecord(value)) throw new Error('Transaction phải là JSON object');
+  if (!isRecord(value)) throw new Error('Transaction must be a JSON object');
   if (!Array.isArray(value.outputs) || !Array.isArray(value.outputs_data)) {
-    throw new Error('Cần arrays outputs và outputs_data trong CKB raw transaction');
+    throw new Error('CKB transaction requires outputs and outputs_data arrays');
   }
   if (value.outputs.length !== value.outputs_data.length) {
-    throw new Error('outputs và outputs_data phải có cùng số phần tử');
+    throw new Error('outputs and outputs_data must have equal lengths');
   }
   if (value.outputs.length === 0 || value.outputs.length > 512) {
-    throw new Error('Demo yêu cầu 1–512 output');
+    throw new Error('Expected 1–512 outputs');
   }
   if (strict) {
     for (const field of ['version', 'cell_deps', 'header_deps', 'inputs', 'witnesses']) {
@@ -130,7 +130,7 @@ export function parseTransaction(value, options = {}) {
   }
   const outputs = value.outputs.map((output, index) => {
     const field = `outputs[${index}]`;
-    if (!isRecord(output)) throw new Error(`${field}: cần object`);
+    if (!isRecord(output)) throw new Error(`${field}: expected object`);
     unknownProperties(output, ['capacity', 'lock', 'type'], field, strict, ignoredFields);
     const capacity = parseU64Hex(output.capacity, `${field}.capacity`);
     const lock = validateScript(output.lock, `${field}.lock`, { strict, ignored: ignoredFields });

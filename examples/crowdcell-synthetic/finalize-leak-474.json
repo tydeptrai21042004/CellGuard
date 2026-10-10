@@ -1,0 +1,57 @@
+{
+  "version": "0x0",
+  "cell_deps": [
+    {
+      "out_point": {
+        "tx_hash": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "index": "0x0"
+      },
+      "dep_type": "code"
+    }
+  ],
+  "header_deps": [],
+  "inputs": [
+    {
+      "since": "0x0",
+      "previous_output": {
+        "tx_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "index": "0x0"
+      }
+    },
+    {
+      "since": "0x0",
+      "previous_output": {
+        "tx_hash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "index": "0x0"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "capacity": "0xddcac9df80",
+      "lock": {
+        "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "hash_type": "type",
+        "args": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      },
+      "type": null
+    },
+    {
+      "capacity": "0xd5d4e7e00",
+      "lock": {
+        "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "hash_type": "type",
+        "args": "0xcccccccccccccccccccccccccccccccccccccccc"
+      },
+      "type": null
+    }
+  ],
+  "outputs_data": [
+    "0x",
+    "0x"
+  ],
+  "witnesses": [
+    "0x",
+    "0x"
+  ]
+}

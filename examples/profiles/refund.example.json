@@ -1,0 +1,54 @@
+{
+  "version": 3,
+  "profile": "crowdcell-refund-example",
+  "strictTransactionShape": true,
+  "roles": {
+    "campaign": {
+      "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "hash_type": "type",
+      "args": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "contributor": {
+      "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "hash_type": "type",
+      "args": "0xdddddddddddddddddddddddddddddddddddddddd"
+    }
+  },
+  "allowedInputRoles": [
+    "campaign"
+  ],
+  "allowedOutputRoles": [
+    "contributor"
+  ],
+  "maxFeeCKB": "0.1",
+  "requiredCellDeps": [
+    {
+      "out_point": {
+        "tx_hash": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "index": "0x0"
+      },
+      "dep_type": "code"
+    }
+  ],
+  "capacityFlow": [
+    {
+      "id": "refund-contributor",
+      "kind": "min-recipient-net-gain",
+      "source": "campaign",
+      "destinations": [
+        "contributor"
+      ],
+      "minRatio": "1",
+      "feeAllowanceCKB": "0.1",
+      "minSourceInputCKB": "1"
+    }
+  ],
+  "sinceRules": [
+    {
+      "id": "refund-epoch-gate",
+      "role": "campaign",
+      "operator": "at-least",
+      "value": "0x200000000000000a"
+    }
+  ]
+}

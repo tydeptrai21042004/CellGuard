@@ -46,12 +46,12 @@ test('reject capacity bigger than uint64 and malformed hex', () => {
   assert.throws(() => parseU64Hex('1234'), /u64/);
   const tx = clone(SAFE_TRANSACTION);
   tx.outputs_data[0] = '0xabc';
-  assert.throws(() => parseTransaction(tx), /số chữ số chẵn/);
+  assert.throws(() => parseTransaction(tx), /even number of digits/);
 });
 test('reject missing outputs data and array length mismatch', () => {
   const tx = clone(SAFE_TRANSACTION);
   tx.outputs_data.pop();
-  assert.throws(() => parseTransaction(tx), /cùng số phần tử/);
+  assert.throws(() => parseTransaction(tx), /equal lengths/);
 });
 test('reject malformed code hash and unsupported hash type', () => {
   const tx = clone(SAFE_TRANSACTION);
@@ -89,11 +89,11 @@ test('empty allowlist means no restriction', () => {
   assert.equal(r.errorCount, 0);
 });
 test('policy validates malformed values', () => {
-  assert.throws(() => parsePolicy({...DEFAULT_POLICY, maxOutputs: 0.2}), /số nguyên/);
-  assert.throws(() => parsePolicy({...DEFAULT_POLICY, maxOutputs: -1}), /số nguyên/);
+  assert.throws(() => parsePolicy({...DEFAULT_POLICY, maxOutputs: 0.2}), /expected integer/);
+  assert.throws(() => parsePolicy({...DEFAULT_POLICY, maxOutputs: -1}), /expected integer/);
   assert.throws(() => parsePolicy({...DEFAULT_POLICY, allowedLockCodeHashes:['oops']}), /code_hash/);
   assert.throws(() => parsePolicy({...DEFAULT_POLICY, denyTypeScripts:'true'}), /boolean/);
-  assert.throws(() => parsePolicy({...DEFAULT_POLICY, version:3}), /version=1/);
+  assert.throws(() => parsePolicy({...DEFAULT_POLICY, version:4}), /version must be 1, 2 or 3/);
 });
 test('analyzer is deterministic and does not mutate inputs', () => {
   const tx = clone(RISK_TRANSACTION);
@@ -106,6 +106,6 @@ test('analyzer is deterministic and does not mutate inputs', () => {
 });
 test('report accurately disclaims absent chain verification', () => {
   const result = analyzeTransaction(SAFE_TRANSACTION, DEMO_POLICY);
-  assert.match(result.disclaimer, /Không chạy CKB-VM/);
-  assert.match(result.disclaimer, /không đảm bảo/);
+  assert.match(result.disclaimer, /No script execution/);
+  assert.match(result.disclaimer, /not consensus validation/);
 });

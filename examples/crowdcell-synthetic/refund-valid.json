@@ -1,0 +1,39 @@
+{
+  "version": "0x0",
+  "cell_deps": [
+    {
+      "out_point": {
+        "tx_hash": "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "index": "0x0"
+      },
+      "dep_type": "code"
+    }
+  ],
+  "header_deps": [],
+  "inputs": [
+    {
+      "since": "0x200000000000000c",
+      "previous_output": {
+        "tx_hash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "index": "0x0"
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "capacity": "0x6fb8b1580",
+      "lock": {
+        "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+        "hash_type": "type",
+        "args": "0xdddddddddddddddddddddddddddddddddddddddd"
+      },
+      "type": null
+    }
+  ],
+  "outputs_data": [
+    "0x"
+  ],
+  "witnesses": [
+    "0x"
+  ]
+}

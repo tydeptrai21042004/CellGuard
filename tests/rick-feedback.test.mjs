@@ -22,3 +22,9 @@ test('refund policy requires exact cell dep and type', () => {
  tx.cell_deps[0].dep_type='code';
  assert.ok(!analyzeTransaction(tx,policy).findings.some(x=>x.code.startsWith('POLICY_') && x.code.includes('CELL_DEP')));
 });
+
+test('default v1 policy does not cap legitimate 200000 CKB pledge transactions', () => {
+ const findings = analyzeTransaction(large(), DEFAULT_POLICY).findings.map(f => f.code);
+ assert.ok(!findings.includes('POLICY_TOTAL_CAPACITY'));
+ assert.ok(!findings.includes('POLICY_EXCESS_CAPACITY'));
+});

@@ -1,17 +1,17 @@
-# CellGuard — Rick feedback incremental patch
+# CellGuard v0.5 — Rick feedback patch
 
-This patch contains only changed files. Copy files over the repository root, preserving paths.
+This release implements:
 
-Implemented:
-- `maxFreeCapacityCKBPerOutput` defaults to `null`, disabling misleading high-unoccupied-capacity warnings; set a decimal CKB value explicitly to opt in.
-- Version 2 `requiredCellDeps` accepts exact `out_point` plus `dep_type`, and fails missing/mismatched dependencies.
-- Regression tests covering both behaviors.
+- Version 3 profiles with exact input/output lock roles, transaction-type allowlists, BigInt capacity accounting, max role net-gain limits, and minimum recipient net-gain ratios.
+- Real-input-capacity resolution through read-only CKB RPC for pre-broadcast transactions, plus historical input resolution for committed transactions; missing evidence is **inconclusive** rather than success.
+- Detection of the synthetic 474 CKB finalizer leak, even with simulated VM/txpool pass. A legitimate finalizer's own change is not classified as stolen proceeds.
+- Exact required cell dependencies (previously implemented in V2), with policy files for synthetic pledge, finalize and refund examples.
+- `since` flag/format checks and epoch-fraction comparisons (not full on-chain maturity assertions).
+- No default universal output-capacity ceiling and no free-capacity warning unless explicitly configured.
+- CLI `--profile`, `--lookup HASH --profile POLICY`, `--input-cells` test fixture support, `--ci` mode, JSON `--output`, plus web historical-audit button.
+- Consistent English CKB parser, policy and finding messages.
+- 108 passing Node.js tests and reproducible CI workflow.
 
-Verification: `npm test`: 88 passed, 0 failed (Node.js).
+**What remains unproven:** A real CrowdCell Testnet replay, production dApp contract correctness, independent cryptographic/SPV verification, and actual Vercel integration under a public RPC provider. Sample transaction IDs, scripts, and Cell inputs are deliberately synthetic.
 
-Not implemented:
-- committed-vs-preflight classification for spent inputs (requires chain transaction hash lookup and explicit historical mode)
-- input/output capacity-flow constraints (requires authoritative input resolution; cannot be implemented securely using output-only analysis)
-- since policies, per-transaction policy selection, complete English localization, or a genuine CrowdCell 474-CKB leak fixture.
-
-Do not treat this incremental patch as production-ready or as validation of the user's actual CrowdCell transaction.
+Read `docs/10_V05_CAPACITY_FLOW.md` and `APPLY_PATCH.md` before deployment.

@@ -1,12 +1,21 @@
-# Apply CellGuard v0.4 live-RPC patch
+# Apply CellGuard v0.5
 
-This is a **changed/new files only** patch compared with the previously supplied CellGuard v0.3 archive. **First apply v0.3** to your original repository, then overlay these v0.4 files at the same relative paths (replace existing files). Do not rename `api/` or `server/`: Vercel discovers the API function at `api/verify.mjs` automatically.
+Two release archives are provided:
+
+1. `CellGuard-v0.5-FULL.zip`: complete ready-to-run source tree based on the user's uploaded `CellGuard-main(3).zip`. Extract the `CellGuard-main/` folder as a standalone project.
+2. `CellGuard-v0.5-CHANGED-FILES.zip`: only modified/new source files relative to the uploaded `CellGuard-main(3).zip`. Extract at your repo root, keeping directory structure and replacing matching files.
+
+To apply the changed-files ZIP to a local Git repository:
 
 ```bash
+# Extract the ZIP and copy its CellGuard-main/ content to your repository root,
+# preserving paths (e.g. site/assets/lib/invariants.mjs).
 npm run check
 npm run dev
 ```
 
-Open http://localhost:3000, select Testnet/Mainnet under **Live CKB verification**, then use a complete signed CKB raw transaction or an existing transaction hash. See `docs/09_LIVE_CKB_RPC_AND_E2E.md` for production details and limits. No extra runtime npm dependencies, wallet, database, or signing keys are required.
+For the new V3 policy format, read [docs/10_V05_CAPACITY_FLOW.md](docs/10_V05_CAPACITY_FLOW.md).
 
-**Important:** Existing examples are synthetic and intentionally cannot pass live verification. Live checks contact RPC endpoints and send transaction data, including witnesses, to the configured node. No `send_transaction` call exists in the server.
+**Do not use the synthetic CrowdCell example scripts/dependencies as real project identifiers.** Real Testnet evaluation requires your own exact CKB lock scripts, contract dependencies, committed transaction hashes and application-specific invariants.
+
+This release never broadcasts transactions. The online path contacts the configured RPC, and a preflight of a *spent* transaction is not a historical audit. To audit an already-committed transaction, use `--lookup HASH --profile POLICY --online testnet` or the web UI's **audit with policy** button.

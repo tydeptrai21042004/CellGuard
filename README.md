@@ -1,4 +1,10 @@
-## NEW in v0.4: live, read-only CKB verification
+## NEW in v0.5: application-level transaction invariants
+
+CellGuard now supports **V3 capacity-flow policies**, exact role-based lock accounting, required transaction dependencies, input-aware net-gain checks, configurable `since` comparisons, read-only RPC preflight, and **committed-transaction historical policy auditing**. The synthetic 474 CKB finalizer-leak regression is included, along with pledge/finalize/refund policy examples.
+
+Start with **[V3 documentation and CLI examples](docs/10_V05_CAPACITY_FLOW.md)**. The example lock scripts and OutPoints are synthetic and **must not be used as real CrowdCell contract identifiers**. The test suite uses mocked RPC; it does not demonstrate the real CrowdCell defect on Testnet. No transaction is broadcast.
+
+## Previously added in v0.4: live, read-only CKB verification
 
 CellGuard now has an optional Node/Vercel backend (`/api/verify`) that queries CKB mainnet/testnet for input-cell liveness, exact fees, VM script execution / witness acceptance, `test_tx_pool_accept` (no broadcast), and existing transaction confirmation status. Offline policy inspection remains available without a network connection. **Node preflight is not independent consensus proof or on-chain finality.**
 

@@ -3,8 +3,8 @@
   "maxOutputs": 20,
   "maxDataBytesPerOutput": 256,
   "maxTotalDataBytes": 2048,
-  "maxTotalOutputCapacityCKB": "1000",
-  "maxFreeCapacityCKBPerOutput": "25",
+  "maxTotalOutputCapacityCKB": null,
+  "maxFreeCapacityCKBPerOutput": null,
   "allowedLockCodeHashes": [
     "0x1111111111111111111111111111111111111111111111111111111111111111"
   ],

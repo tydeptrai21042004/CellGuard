@@ -1,20 +1,24 @@
 #!/usr/bin/env node
 /** Offline policy CLI + optional read-only CKB RPC verification (no keys or broadcast). */
-import { readFile, stat } from 'node:fs/promises';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import { analyzeTransaction } from '../site/assets/lib/analyzer.mjs';
 import { compareTransactions } from '../site/assets/lib/diff.mjs';
 import { parseStrictJSON, MAX_JSON_BYTES } from '../site/assets/lib/strict-json.mjs';
 import { createRpc } from '../server/rpc.mjs';
-import { lookupTransactionOnline, verifyTransactionOnline } from '../server/verification.mjs';
+import { auditCommittedTransactionOnline, lookupTransactionOnline, verifyTransactionOnline } from '../server/verification.mjs';
 
-const help = `CellGuard v0.4 · offline policy + read-only online CKB verification
-Usage: node cli/cellguard.mjs --transaction tx.json --policy policy.json [--format text|json] [--fail-on-warning]
-       node cli/cellguard.mjs --transaction tx.json --policy policy.json --online testnet|mainnet [--format text|json]
-       node cli/cellguard.mjs --online testnet|mainnet --lookup 0x<64 hex> [--format text|json]
-       node cli/cellguard.mjs --transaction tx.json --compare previous-tx.json [--format text|json]
-Online mode makes read-only requests to CKB RPC and sends the signed transaction JSON (with witnesses) to the node.
-A successful CKB VM script execution does NOT prove full consensus validity, and arbitrary scripts may not verify cryptographic signatures.
-Exit: 0 = checks passed/committed/compare success; 1 = failure or inconclusive online result; 2 = input or transport error.
+const help = `CellGuard v0.5 · policy invariants + read-only CKB RPC verification
+Usage: node cli/cellguard.mjs --transaction tx.json --profile profile.json [--format json|text] [--ci]
+       node cli/cellguard.mjs --transaction tx.json --policy policy.json --online testnet|mainnet [--ci]
+       node cli/cellguard.mjs --online testnet|mainnet --lookup 0x<hash> --profile profile.json [--ci]
+       node cli/cellguard.mjs --online testnet|mainnet --lookup 0x<hash>
+       node cli/cellguard.mjs --transaction tx.json --profile profile.json --input-cells fixture.json
+       node cli/cellguard.mjs --transaction tx.json --compare old.json
+--profile and --policy are aliases for JSON policy file path. No embedded CrowdCell keys are assumed.
+--input-cells accepts externally supplied UNVERIFIED input metadata for deterministic tests only.
+--ci fails closed for missing/untrusted input evidence; --output saves JSON evidence to a file.
+Online verification sends signed witnesses to your configured CKB RPC, but does NOT broadcast.
+Exit: 0 all required checks passed; 1 policy failure; 2 invalid input/transport; 3 inconclusive/untrusted verification.
 `;
 const args = process.argv.slice(2);
 async function readJSON(path, label) {
@@ -23,23 +27,27 @@ async function readJSON(path, label) {
   return parseStrictJSON(await readFile(path, 'utf8'), label);
 }
 function parseArgs() {
-  const allowed = new Set(['--transaction','--policy','--compare','--online','--lookup','--format','--fail-on-warning']);
+  const allowed = new Set(['--transaction','--policy','--compare','--online','--lookup','--format','--fail-on-warning','--profile','--input-cells','--ci','--output']);
   const config = {};
   for (let i=0; i<args.length; i++) {
     const name = args[i];
     if (!allowed.has(name) || Object.hasOwn(config,name)) throw new Error(`Unexpected/duplicate argument: ${name}`);
-    if (name === '--fail-on-warning') { config[name] = true; continue; }
+    if (name === '--fail-on-warning' || name === '--ci') { config[name] = true; continue; }
     config[name] = args[++i];
     if (!config[name] || config[name].startsWith('--')) throw new Error(`Missing value for ${name}`);
   }
   if (!['json','text'].includes(config['--format'] ?? 'text')) throw new Error('--format must be text or json');
   if (config['--online'] && !['mainnet','testnet'].includes(config['--online'])) throw new Error('--online must be mainnet or testnet');
+  if (config['--profile'] && config['--policy']) throw new Error('Choose --profile or --policy, not both');
+  const hasPolicy = !!(config['--profile'] || config['--policy']);
   if (config['--lookup']) {
-    if (!config['--online'] || config['--policy'] || config['--compare'] || config['--transaction']) throw new Error('--lookup requires --online and must not include transaction/policy/compare');
+    if (!config['--online'] || config['--compare'] || config['--transaction'] || config['--input-cells'])
+      throw new Error('--lookup requires --online and cannot include a transaction or fixture');
   } else {
     if (!config['--transaction']) throw new Error('Missing --transaction; run --help');
-    if (!!config['--policy'] === !!config['--compare']) throw new Error('Provide exactly one of --policy or --compare');
-    if (config['--compare'] && (config['--online'] || config['--fail-on-warning'])) throw new Error('Comparison is offline only');
+    if (hasPolicy === !!config['--compare']) throw new Error('Provide exactly one of --profile/--policy or --compare');
+    if (config['--compare'] && (config['--online'] || config['--fail-on-warning'] || config['--ci'])) throw new Error('Comparison is offline only');
+    if (config['--input-cells'] && config['--online']) throw new Error('Unverified fixture inputs cannot be used with --online');
   }
   return config;
 }
@@ -52,6 +60,10 @@ function output(report, config) {
   } else if (report.mode === 'online-preflight') {
     process.stdout.write(`CellGuard ONLINE ${report.network}: ${report.status} | live ${report.liveInputCount}/${report.inputCount} | fee ${report.feeCKB ?? '?'} CKB | VM ${report.scripts.status} | pool ${report.txPool.status} | cycles ${report.scripts.cycles ?? '?'}\n`);
     for (const item of report.findings) process.stdout.write(`  ${item.severity.toUpperCase()} ${item.code}: ${item.detail}\n`);
+    process.stdout.write(`${report.limitations}\n`);
+  } else if (report.mode === 'committed-audit') {
+    process.stdout.write(`CKB historical audit ${report.network} ${report.hash}: ${report.status} | chain ${report.chainStatus} | confirmations ${report.confirmations ?? '?'}\n`);
+    for (const f of report.findings) process.stdout.write(`  ${f.severity.toUpperCase()} ${f.code}: ${f.detail}\n`);
     process.stdout.write(`${report.limitations}\n`);
   } else if (report.mode === 'chain-lookup') {
     process.stdout.write(`CKB ${report.network} hash ${report.hash}: ${report.status} | confirmations ${report.confirmations ?? '?'}\n${report.limitations}\n`);
@@ -66,19 +78,36 @@ async function main() {
   const config = parseArgs();
   let report;
   if (config['--lookup']) {
-    report = await lookupTransactionOnline({ network: config['--online'], hash: config['--lookup'] }, createRpc(config['--online']));
+    const policyFile = config['--profile'] || config['--policy'];
+    report = policyFile
+      ? await auditCommittedTransactionOnline({ network: config['--online'], hash: config['--lookup'], policy: await readJSON(policyFile, 'Profile JSON') }, createRpc(config['--online']))
+      : await lookupTransactionOnline({ network: config['--online'], hash: config['--lookup'] }, createRpc(config['--online']));
   } else {
     const tx = await readJSON(config['--transaction'], 'Transaction JSON');
     if (config['--compare']) report = compareTransactions(await readJSON(config['--compare'], 'Previous transaction JSON'), tx);
     else {
-      const policy = await readJSON(config['--policy'], 'Policy JSON');
-      report = config['--online'] ? await verifyTransactionOnline({ network: config['--online'], transaction: tx, policy }, createRpc(config['--online'])) : analyzeTransaction(tx, policy);
+      const policy = await readJSON(config['--profile'] || config['--policy'], 'Policy JSON');
+      let context = {};
+      if (config['--input-cells']) {
+        const cells = await readJSON(config['--input-cells'], 'Input Cells fixture');
+        if (!Array.isArray(cells)) throw new Error('Input Cells fixture must be a JSON array');
+        context = { resolvedInputs: cells, inputEvidence: 'provided-unverified' };
+      }
+      report = config['--online'] ? await verifyTransactionOnline({ network: config['--online'], transaction: tx, policy }, createRpc(config['--online'])) : analyzeTransaction(tx, policy, context);
     }
   }
   output(report, config);
-  if (report.mode === 'online-preflight') return report.status === 'pass' && !(config['--fail-on-warning'] && report.findings.some(x => x.severity === 'warning')) ? 0 : 1;
+  if (config['--output']) await writeFile(config['--output'], JSON.stringify(report, null, 2) + '\n', { flag: 'w', mode: 0o600 });
+  if (report.mode === 'online-preflight' || report.mode === 'committed-audit') {
+    if (['inconclusive'].includes(report.status)) return 3;
+    if (report.status !== 'pass' || (config['--fail-on-warning'] && report.findings.some(x => x.severity === 'warning'))) return 1;
+    return 0;
+  }
   if (report.mode === 'chain-lookup') return report.status === 'committed' ? 0 : 1;
   if (report.mode === 'indexed-output-diff') return 0;
+  if (report.errorCount && !report.findings.every(f => f.code === 'INPUT_EVIDENCE_REQUIRED')) return 1;
+  if (report.capacityFlow?.inputEvidence === 'provided-unverified') return 3;
+  if (report.findings?.some(f => f.code === 'INPUT_EVIDENCE_REQUIRED')) return 3;
   return report.errorCount || (config['--fail-on-warning'] && report.warningCount) ? 1 : 0;
 }
 main().then(code => { process.exitCode = code; }, error => {

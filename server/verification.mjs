@@ -1,6 +1,6 @@
 /** Read-only network verification. Results are observations from a configured CKB RPC, not proofs of consensus. */
 import { analyzeTransaction } from '../site/assets/lib/analyzer.mjs';
-import { parseTransaction, formatCkb } from '../site/assets/lib/ckb.mjs';
+import { parseTransaction, formatCkb, validateScript } from '../site/assets/lib/ckb.mjs';
 import { parsePolicy } from '../site/assets/lib/policy.mjs';
 
 const CHAIN = { mainnet: 'ckb', testnet: 'ckb_testnet' };
@@ -66,7 +66,7 @@ function inputStatus(result, i) {
   if (result.status !== 'live') return { index: i, status: result.status, capacity: null };
   const output = result.cell?.output;
   if (!output || typeof output !== 'object') fail('RPC_RESPONSE_INVALID', `inputs[${i}]: missing live output`);
-  return { index: i, status: 'live', capacity: bigintHex(output.capacity, `inputs[${i}].capacity`).toString() };
+  return { index: i, status: 'live', capacity: bigintHex(output.capacity, `inputs[${i}].capacity`).toString(), lock: output.lock ?? null };
 }
 function sumOutputs(tx) { return tx.outputs.reduce((total, out) => total + BigInt(out.capacity), 0n); }
 function witnessCount(tx) { return tx.witnesses.length; }
@@ -99,7 +99,16 @@ export async function verifyTransactionOnline({ network, transaction, policy }, 
   const inputCapacity = cells.filter(x => x.capacity !== null).reduce((s,x) => s + BigInt(x.capacity), 0n);
   const outputCapacity = sumOutputs(tx);
   const fee = allLive ? inputCapacity - outputCapacity : null;
-  const findings = [...local.findings.map(f => ({ severity: f.severity, code: f.code, detail: f.detail }))];
+  // Flow policies require trusted input lock/capacity metadata. Missing lock data is
+  // inconclusive, never silently treated as verified input evidence.
+  if (allLive && cells.every(c => c.lock)) {
+    try {
+      const resolvedInputs = cells.map((cell, index) => ({ index,
+        outPoint: points[index], capacity: '0x' + BigInt(cell.capacity).toString(16), lock: cell.lock }));
+      local = analyzeTransaction(tx, policy, { resolvedInputs, inputEvidence: 'rpc-live' });
+    } catch (error) { fail('INPUT_RESOLUTION_INVALID', `Invalid live-cell metadata: ${errorMessage(error)}`, 502); }
+  }
+  const findings = [...local.findings.map(f => ({ severity: f.severity, code: f.code, path: f.path, detail: f.detail }))];
   for (const cell of cells.filter(x => x.status !== 'live')) findings.push({ severity: 'error', code: 'INPUT_NOT_LIVE', detail: `Input #${cell.index} is ${cell.status} according to the RPC` });
   if (fee !== null && fee < 0n) findings.push({ severity: 'error', code: 'NEGATIVE_FEE', detail: `Outputs exceed inputs by ${formatCkb(-fee)} CKB` });
   // This is a preflight policy budget, not a universal CKB protocol fee limit.
@@ -175,7 +184,7 @@ export async function verifyTransactionOnline({ network, transaction, policy }, 
     inputCount: cells.length, liveInputCount: cells.filter(x => x.status === 'live').length,
     inputs: cells, inputCapacityCKB: allLive ? formatCkb(inputCapacity) : null,
     outputCapacityCKB: formatCkb(outputCapacity), feeCKB: fee === null ? null : formatCkb(fee),
-    scripts, txPool, findings, limitations: 'RPC observations only. test_tx_pool_accept tests current-node txpool acceptance without broadcast, not actual inclusion or permanent consensus validity. A passing script does not imply every custom lock cryptographically verifies a signature. Node state may change. No transaction was submitted.'
+    capacityFlow: local.capacityFlow, scripts, txPool, findings, limitations: 'RPC observations only. test_tx_pool_accept tests current-node txpool acceptance without broadcast, not actual inclusion or permanent consensus validity. A passing script does not imply every custom lock cryptographically verifies a signature. Node state may change. No transaction was submitted.'
   };
 }
 
@@ -225,5 +234,83 @@ export async function lookupTransactionOnline({ network, hash }, rpc) {
     ...base, mode: 'chain-lookup', hash: txHash, status: 'committed', blockHash, blockNumber: header.number,
     confirmations: confirmations.toString(), proof,
     limitations: 'Commitment and confirmations are asserted by the configured RPC node. Inclusion proof, when available, was verified by that SAME RPC node—not independently by CellGuard or an SPV client. No finality proof was performed.'
+  };
+}
+
+/** Audit historical, canonical committed transactions. Never tests spent inputs for liveness. */
+export async function auditCommittedTransactionOnline({ network, hash, policy }, rpc) {
+  safeNetwork(network); const txHash = requireHexHash(hash, 'hash');
+  let parsedPolicy;
+  try { parsedPolicy = parsePolicy(policy); } catch (err) { fail('BAD_POLICY', errorMessage(err)); }
+  const inclusion = await lookupTransactionOnline({ network, hash: txHash }, rpc);
+  if (inclusion.status !== 'committed') return {
+    ...inclusion, mode: 'committed-audit', status: 'inconclusive', chainStatus: inclusion.status,
+    findings: [{ severity: 'warning', code: 'TRANSACTION_NOT_CANONICAL_COMMITTED', detail: `Cannot audit historical inputs: ${inclusion.status}` }],
+    limitations: 'Historical audit requires a transaction committed in a canonical block according to the selected RPC.'
+  };
+  const record = await rpc('get_transaction', [txHash]);
+  const raw = record?.transaction?.inner ?? record?.transaction;
+  if (!raw || typeof raw !== 'object') fail('HISTORY_UNAVAILABLE', 'RPC did not return the committed transaction body', 503);
+  if (raw.hash !== undefined && (typeof raw.hash !== 'string' || raw.hash.toLowerCase() !== txHash))
+    fail('HISTORY_HASH_MISMATCH', 'RPC committed transaction hash does not match the requested hash', 502);
+  const tx = { ...raw }; delete tx.hash;
+  try { parseTransaction(tx, { strict: true }); } catch (err) { fail('HISTORY_INVALID', `Committed transaction body malformed: ${errorMessage(err)}`, 502); }
+  if (!tx.inputs.length || tx.inputs.length > MAX_RPC_INPUTS) fail('HISTORY_INPUTS_LIMIT', `Audit supports 1–${MAX_RPC_INPUTS} ordinary inputs`);
+  const missing = [];
+  const uniqueParentCache = new Map();
+  const canonicalHeaderCache = new Map();
+  const inputs = await mapLimited(tx.inputs, 4, async (input, index) => {
+    const point = inputOutPoint(input, index);
+    const parentHash = point.tx_hash.toLowerCase();
+    if (!uniqueParentCache.has(parentHash)) uniqueParentCache.set(parentHash, rpc('get_transaction', [parentHash]));
+    let parent;
+    try { parent = await uniqueParentCache.get(parentHash); }
+    catch (err) { missing.push(`inputs[${index}]: ${errorMessage(err)}`); return null; }
+    if (parent?.tx_status?.status !== 'committed' || !parent.tx_status.block_hash) {
+      missing.push(`inputs[${index}]: originating transaction unavailable or not committed`); return null;
+    }
+    const parentBlockHash = requireHexHash(parent.tx_status.block_hash, 'parent.block_hash');
+    if (!canonicalHeaderCache.has(parentBlockHash)) canonicalHeaderCache.set(parentBlockHash, (async () => {
+      const header = await rpc('get_header', [parentBlockHash]);
+      if (!header || !HEX_U64.test(header.number)) return false;
+      const canonical = await rpc('get_block_hash', [header.number]);
+      return typeof canonical === 'string' && canonical.toLowerCase() === parentBlockHash;
+    })());
+    let canonical = false;
+    try { canonical = await canonicalHeaderCache.get(parentBlockHash); }
+    catch { /* preserve unknown state */ }
+    if (!canonical) { missing.push(`inputs[${index}]: parent block is not verifiably canonical`); return null; }
+    const originTx = parent.transaction?.inner ?? parent.transaction;
+    if (originTx?.hash !== undefined && (typeof originTx.hash !== 'string' || originTx.hash.toLowerCase() !== parentHash)) {
+      missing.push(`inputs[${index}]: originating transaction hash mismatch`); return null;
+    }
+    const n = Number(BigInt(point.index));
+    if (!Array.isArray(originTx?.outputs) || n >= originTx.outputs.length) {
+      missing.push(`inputs[${index}]: parent output index does not exist`); return null;
+    }
+    const output = originTx.outputs[n];
+    try {
+      bigintHex(output.capacity, `inputs[${index}].capacity`);
+      validateScript(output.lock, `inputs[${index}].lock`, { strict: true });
+      return { index, outPoint: point, capacity: output.capacity, lock: output.lock };
+    } catch { missing.push(`inputs[${index}]: malformed historical output`); return null; }
+  });
+  if (missing.length) return {
+    ...inclusion, mode: 'committed-audit', chainStatus: 'committed', status: 'inconclusive',
+    policyVersion: parsedPolicy.version, profile: parsedPolicy.profile ?? null,
+    findings: missing.map(detail => ({ severity: 'warning', code: 'HISTORICAL_INPUT_UNAVAILABLE', detail })),
+    limitations: 'Cannot evaluate capacity invariants without every historical parent output. The transaction is committed, but policy compliance is not established.'
+  };
+  let report;
+  try { report = analyzeTransaction(tx, policy, { resolvedInputs: inputs, inputEvidence: 'rpc-historical' }); }
+  catch (err) { fail('HISTORICAL_POLICY_INVALID', errorMessage(err), 502); }
+  return {
+    ...inclusion, mode: 'committed-audit', chainStatus: 'committed', status: report.errorCount ? 'policy-failed' : 'pass',
+    policyVersion: report.policyVersion, profile: report.profile, checks: { policy: report.errorCount ? 'fail' : 'pass',
+      historicalInputs: 'resolved-from-canonical-parent-transactions', inclusion: inclusion.proof?.status ?? 'unavailable',
+      historicalVmReplay: 'not-performed', finality: 'not-independently-verified' },
+    findings: report.findings, capacityFlow: report.capacityFlow, transaction: { inputCount: inputs.length, outputCount: report.outputCount,
+      outputCapacityCKB: report.totalCapacityCKB },
+    limitations: 'Historical inputs and inclusion are attested by the selected RPC node. This is an application-policy audit, not an independent consensus proof, replay of VM scripts at the historical state, or a finality guarantee.'
   };
 }

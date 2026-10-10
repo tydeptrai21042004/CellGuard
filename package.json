@@ -1,9 +1,9 @@
 {
   "name": "cellguard-web",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
-  "description": "Terminal-style CKB policy preflight and read-only live CKB RPC verification",
+  "description": "CKB transaction policy invariants, capacity-flow audits, read-only preflight and committed-history verification",
   "engines": { "node": ">=20" },
   "scripts": {
     "dev": "node scripts/serve.mjs",

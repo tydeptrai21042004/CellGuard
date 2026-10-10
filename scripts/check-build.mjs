@@ -6,7 +6,7 @@ const root = process.cwd();
 const required = [
   'vercel.json', 'site/index.html', 'site/assets/main.mjs',
   'site/assets/styles.css', 'site/assets/lib/ckb.mjs',
-  'site/assets/lib/policy.mjs', 'site/assets/lib/analyzer.mjs',
+  'site/assets/lib/policy.mjs', 'site/assets/lib/analyzer.mjs', 'site/assets/lib/invariants.mjs',
   'site/assets/lib/fixtures.mjs', 'site/assets/lib/terminal.mjs',
   'site/assets/lib/diff.mjs', 'site/assets/lib/strict-json.mjs',
   'cli/cellguard.mjs', 'api/verify.mjs', 'server/http.mjs', 'server/rpc.mjs', 'server/verification.mjs', '.github/workflows/ci.yml', '.gitignore',

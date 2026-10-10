@@ -80,9 +80,9 @@ function invalidateOnline() {
   onlineRevision++;
   if (pendingNetwork) { pendingNetwork.abort(); pendingNetwork = null; }
   currentOnlineReport = null;
-  if (['online-preflight', 'chain-lookup'].includes(currentReport?.mode)) { currentReport = null; copy.disabled = true; download.disabled = true; }
+  if (['online-preflight', 'chain-lookup', 'committed-audit'].includes(currentReport?.mode)) { currentReport = null; copy.disabled = true; download.disabled = true; }
   $('online-details').replaceChildren(); $('online-details').hidden = true;
-  $('verify-online').disabled = false; $('lookup-online').disabled = false; $('cancel-online').disabled = true;
+  $('verify-online').disabled = false; $('lookup-online').disabled = false; $('audit-online').disabled = false; $('cancel-online').disabled = true;
   onlineStatus('idle', 'Awaiting live verification', 'Previous RPC result cleared because the request or network changed.');
 }
 function invalidateReport() {
@@ -183,7 +183,7 @@ function renderReport(report, durationMs) {
     checkRow('lock script policy', report.checks.lockPolicy),
     checkRow('type script policy', report.checks.typePolicy),
     checkRow('other policy limits', report.checks.constraints),
-    ...(report.policyVersion === 2 ? [checkRow('recipient intent rules', report.checks.intent)] : [])
+    ...(report.policyVersion >= 2 ? [checkRow('recipient intent rules', report.checks.intent)] : [])
   );
   checks.hidden = false;
   findings.replaceChildren();
@@ -240,7 +240,7 @@ function applyFindingFilter() {
 }
 function renderDiff(report) {
   invalidateReport();
-  currentReport = { ...report, source: currentSource, analyzerVersion: '0.4.0', generatedAt: new Date().toISOString() };
+  currentReport = { ...report, source: currentSource, analyzerVersion: '0.5.0', generatedAt: new Date().toISOString() };
   copy.disabled = false;
   download.disabled = false;
   statusView(report.changeCount ? 'warn' : 'pass',
@@ -262,10 +262,15 @@ function renderDiff(report) {
 function renderOnlineReport(report) {
   const details = $('online-details'); details.replaceChildren(); details.hidden = false;
   const kind = report.status === 'committed' || report.status === 'pass' ? 'pass'
-    : ['fail', 'rejected', 'reorg-risk'].includes(report.status) ? 'fail' : 'warn';
-  onlineStatus(kind, `${report.mode === 'chain-lookup' ? 'RPC transaction status' : 'Live preflight'}: ${report.status.toUpperCase()}`,
+    : ['fail', 'policy-failed', 'rejected', 'reorg-risk'].includes(report.status) ? 'fail' : 'warn';
+  onlineStatus(kind, `${report.mode === 'chain-lookup' ? 'RPC transaction status' : report.mode === 'committed-audit' ? 'Historical policy audit' : 'Live preflight'}: ${report.status.toUpperCase()}`,
     `Network ${report.network} · reported chain ${report.chain} · tip ${report.tip.number} · ${report.observedAt}`);
-  const rows = report.mode === 'chain-lookup'
+  const rows = report.mode === 'committed-audit'
+    ? [['Transaction hash', report.hash], ['Chain state', report.chainStatus],
+       ['Confirmations', report.confirmations ?? 'unknown'],
+       ['Policy result', report.status], ['Historical inputs', report.checks?.historicalInputs ?? 'unavailable'],
+       ['Capacity-flow evidence', report.capacityFlow?.inputEvidence ?? 'unavailable']]
+    : report.mode === 'chain-lookup'
     ? [['Transaction hash', report.hash], ['Block', report.blockHash ?? 'not committed'],
        ['Confirmations', report.confirmations ?? 'not confirmed'], ['Inclusion proof', report.proof ? `${report.proof.status} · ${report.proof.reason}` : 'not available']]
     : [['Input cells', `${report.liveInputCount}/${report.inputCount} live`],
@@ -282,6 +287,9 @@ function renderOnlineReport(report) {
     line.append(text('strong', '', name + ': '), text('span', '', value));
     details.append(line);
   }
+  if (report.capacityFlow?.roles) for (const [role, amounts] of Object.entries(report.capacityFlow.roles)) {
+    details.append(text('p', '', `${role}: input ${amounts.inputCKB} CKB · output ${amounts.outputCKB} CKB · net ${amounts.netCKB} CKB`));
+  }
   for (const item of report.findings ?? []) details.append(text('p', `online-${item.severity === 'error' ? 'error' : 'warning'}`, `${item.severity.toUpperCase()} ${item.code}: ${item.detail}`));
   details.append(text('p', 'online-warning', `LIMITATION: ${report.limitations}`));
   promptEcho(report.mode === 'chain-lookup' ? 'lookup' : 'verify json', [
@@ -294,7 +302,7 @@ async function callLiveApi(action, payload) {
   if (pendingNetwork) pendingNetwork.abort();
   const controller = new AbortController(); pendingNetwork = controller;
   const snapshot = ++onlineRevision;
-  $('verify-online').disabled = true; $('lookup-online').disabled = true; $('cancel-online').disabled = false;
+  $('verify-online').disabled = true; $('lookup-online').disabled = true; $('audit-online').disabled = true; $('cancel-online').disabled = false;
   onlineStatus('idle', 'Querying CKB node…', 'Requesting chain data from the configured read-only RPC. No transaction is broadcast.');
   try {
     const response = await fetch('/api/verify', {
@@ -305,7 +313,7 @@ async function callLiveApi(action, payload) {
     if (snapshot !== onlineRevision) return;
     if (!response.ok || result.error) throw new Error(`${result.error?.code ?? 'HTTP_' + response.status}: ${result.error?.message ?? 'Request failed'}`);
     currentOnlineReport = result;
-    currentReport = { ...result, analyzerVersion: '0.4.0' };
+    currentReport = { ...result, analyzerVersion: '0.5.0' };
     copy.disabled = false; download.disabled = false;
     renderOnlineReport(result);
   } catch (error) {
@@ -317,7 +325,7 @@ async function callLiveApi(action, payload) {
   } finally {
     if (snapshot === onlineRevision) {
       pendingNetwork = null;
-      $('verify-online').disabled = false; $('lookup-online').disabled = false; $('cancel-online').disabled = true;
+      $('verify-online').disabled = false; $('lookup-online').disabled = false; $('audit-online').disabled = false; $('cancel-online').disabled = true;
     }
   }
 }
@@ -336,6 +344,14 @@ function lookupOnline(hash = $('lookup-hash').value.trim()) {
   $('lookup-hash').value = hash;
   void callLiveApi('lookup', { hash });
 }
+function auditOnline() {
+  const hash = $('lookup-hash').value.trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) {
+    onlineStatus('fail', 'Invalid hash', 'A 32-byte transaction hash is required for historical audit.'); return;
+  }
+  try { void callLiveApi('audit', { hash, policy: parseJSON(policyInput.value, 'Policy JSON') }); }
+  catch (error) { onlineStatus('fail', 'Invalid policy', error instanceof Error ? error.message : 'Invalid JSON'); }
+}
 
 function doInspect(command, fixtureName) {
   invalidateOnline();
@@ -346,7 +362,7 @@ function doInspect(command, fixtureName) {
   const start = performance.now();
   const report = analyzeTransaction(parseJSON(txInput.value, 'Transaction JSON'), parseJSON(policyInput.value, 'Policy JSON'));
   const elapsed = performance.now() - start;
-  currentReport = { ...report, analyzerVersion: '0.4.0', source: currentSource, generatedAt: new Date().toISOString() };
+  currentReport = { ...report, analyzerVersion: '0.5.0', source: currentSource, generatedAt: new Date().toISOString() };
   download.disabled = false;
   copy.disabled = false;
   renderReport(currentReport, elapsed);
@@ -475,8 +491,9 @@ $('run-diff').addEventListener('click', () => runCommand('diff'));
 $('undo-replace').addEventListener('click', () => runCommand('undo'));
 $('verify-online').addEventListener('click', verifyOnline);
 $('lookup-online').addEventListener('click', () => lookupOnline());
+$('audit-online').addEventListener('click', auditOnline);
 $('network-select').addEventListener('change', invalidateOnline);
-$('lookup-hash').addEventListener('input', () => { if (currentOnlineReport?.mode === 'chain-lookup') invalidateOnline(); });
+$('lookup-hash').addEventListener('input', () => { if (['chain-lookup', 'committed-audit'].includes(currentOnlineReport?.mode)) invalidateOnline(); });
 $('cancel-online').addEventListener('click', invalidateOnline);
 $('compare-current').addEventListener('click', () => {
   if (compareInput.value.trim() && compareInput.value !== txInput.value && !window.confirm('Replace the comparison baseline with the current transaction?')) return;

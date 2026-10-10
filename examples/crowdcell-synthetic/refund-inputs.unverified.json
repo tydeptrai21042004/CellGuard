@@ -1,0 +1,15 @@
+[
+  {
+    "index": 0,
+    "outPoint": {
+      "tx_hash": "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "index": "0x0"
+    },
+    "capacity": "0x6fc23ac00",
+    "lock": {
+      "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "hash_type": "type",
+      "args": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    }
+  }
+]
