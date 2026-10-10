@@ -9,7 +9,7 @@ const REQUIRED_FIELDS = Object.freeze([
 export const DEFAULT_POLICY = Object.freeze({
   version: 1, maxOutputs: 20, maxDataBytesPerOutput: 256,
   maxTotalDataBytes: 2048, maxTotalOutputCapacityCKB: '1000',
-  maxFreeCapacityCKBPerOutput: '25',
+  maxFreeCapacityCKBPerOutput: null,
   allowedLockCodeHashes: [], allowedTypeCodeHashes: [],
   allowedLockScripts: [], allowedTypeScripts: [], denyTypeScripts: false
 });
@@ -18,7 +18,7 @@ export const V2_POLICY = Object.freeze({
   minOutputs: 1, requireTypeScript: false,
   maxTypeScriptOutputs: 512, requireOutputDataEmpty: false,
   requireAllowedLock: false, maxTotalFreeCapacityCKB: null,
-  requiredOutputs: []
+  requiredOutputs: [], requiredCellDeps: []
 });
 function integerInRange(value, name, max) {
   if (!Number.isSafeInteger(value) || value < 0 || value > max) {
@@ -54,6 +54,17 @@ function fullScripts(value, name) {
   const scripts = value.map((item, index) => script(item, `${name}[${index}]`));
   const unique = new Map(scripts.map(item => [`${item.codeHash}|${item.hashType}|${item.args}`, item]));
   return Object.freeze([...unique.values()]);
+}
+function requiredCellDeps(value) {
+  if (!Array.isArray(value) || value.length > 64) throw new Error('requiredCellDeps: expected up to 64 entries');
+  return Object.freeze(value.map((dep, i) => {
+    if (!isRecord(dep) || Object.keys(dep).some(key => !['out_point', 'dep_type'].includes(key))) throw new Error(`requiredCellDeps[${i}]: invalid dependency`);
+    if (!isRecord(dep.out_point) || Object.keys(dep.out_point).some(key => !['tx_hash','index'].includes(key))) throw new Error(`requiredCellDeps[${i}].out_point: invalid outpoint`);
+    const { tx_hash, index } = dep.out_point;
+    if (typeof tx_hash !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(tx_hash) || typeof index !== 'string' || !/^0x[0-9a-fA-F]{1,8}$/.test(index) || BigInt(index) > 0xffffffffn) throw new Error(`requiredCellDeps[${i}]: invalid outpoint`);
+    if (!['code','dep_group'].includes(dep.dep_type)) throw new Error(`requiredCellDeps[${i}].dep_type: invalid type`);
+    return Object.freeze({ outPoint: `${tx_hash.toLowerCase()}:${BigInt(index)}`, depType: dep.dep_type });
+  }));
 }
 function requiredOutputs(value) {
   if (!Array.isArray(value) || value.length > 32) throw new Error('requiredOutputs: expected at most 32 rules');
@@ -96,7 +107,7 @@ export function parsePolicy(input) {
     maxDataBytesPerOutput: integerInRange(input.maxDataBytesPerOutput, 'maxDataBytesPerOutput', 1_000_000),
     maxTotalDataBytes: integerInRange(input.maxTotalDataBytes, 'maxTotalDataBytes', 1_000_000),
     maxTotalOutputCapacityCKB: parseCkbDecimal(input.maxTotalOutputCapacityCKB, 'maxTotalOutputCapacityCKB'),
-    maxFreeCapacityCKBPerOutput: parseCkbDecimal(input.maxFreeCapacityCKBPerOutput, 'maxFreeCapacityCKBPerOutput'),
+    maxFreeCapacityCKBPerOutput: input.maxFreeCapacityCKBPerOutput === null ? null : parseCkbDecimal(input.maxFreeCapacityCKBPerOutput, 'maxFreeCapacityCKBPerOutput'),
     allowedLockCodeHashes: hashes(input.allowedLockCodeHashes, 'allowedLockCodeHashes'),
     allowedTypeCodeHashes: hashes(input.allowedTypeCodeHashes, 'allowedTypeCodeHashes'),
     allowedLockScripts: fullScripts(input.allowedLockScripts ?? [], 'allowedLockScripts'),
@@ -113,7 +124,8 @@ export function parsePolicy(input) {
     requireOutputDataEmpty: boolean(p.requireOutputDataEmpty, 'requireOutputDataEmpty'),
     requireAllowedLock: boolean(p.requireAllowedLock, 'requireAllowedLock'),
     maxTotalFreeCapacityCKB: p.maxTotalFreeCapacityCKB === null ? null : parseCkbDecimal(p.maxTotalFreeCapacityCKB, 'maxTotalFreeCapacityCKB'),
-    requiredOutputs: requiredOutputs(p.requiredOutputs)
+    requiredOutputs: requiredOutputs(p.requiredOutputs),
+    requiredCellDeps: requiredCellDeps(p.requiredCellDeps)
   };
   if (base.denyTypeScripts && extension.requireTypeScript) throw new Error('denyTypeScripts conflicts with requireTypeScript');
   if (extension.minOutputs > base.maxOutputs) throw new Error('minOutputs > maxOutputs');

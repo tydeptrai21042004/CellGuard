@@ -44,7 +44,7 @@ export function analyzeTransaction(txInput, policyInput) {
     if (output.dataBytes > policy.maxDataBytesPerOutput) {
       push('POLICY_DATA_TOO_LARGE', 'error', `${path}.data`, `${output.dataBytes} bytes > giới hạn ${policy.maxDataBytesPerOutput}`);
     }
-    if (output.free > policy.maxFreeCapacityCKBPerOutput) {
+    if (policy.maxFreeCapacityCKBPerOutput !== null && output.free > policy.maxFreeCapacityCKBPerOutput) {
       push('POLICY_EXCESS_CAPACITY', 'warning', `${path}.capacity`, `Capacity chưa chiếm dụng ${formatCkb(output.free)} CKB > ngưỡng ${formatCkb(policy.maxFreeCapacityCKBPerOutput)} CKB`);
     }
     if (policy.allowedLockCodeHashes.length && !policy.allowedLockCodeHashes.includes(output.lock.codeHash)) {
@@ -77,6 +77,15 @@ export function analyzeTransaction(txInput, policyInput) {
     });
   }
   if (policy.version === 2) {
+    if (policy.requiredCellDeps.length) {
+      if (!Array.isArray(txInput.cell_deps)) push('POLICY_CELL_DEPS_UNAVAILABLE', 'error', 'cell_deps', 'A full transaction with cell_deps is required to evaluate dependency rules');
+      else for (const [i, dep] of policy.requiredCellDeps.entries()) {
+        const found = txInput.cell_deps.some(candidate => candidate && candidate.out_point &&
+          typeof candidate.out_point.tx_hash === 'string' && typeof candidate.out_point.index === 'string' &&
+          candidate.out_point.tx_hash.toLowerCase() + ':' + String(BigInt(candidate.out_point.index)) === dep.outPoint && candidate.dep_type === dep.depType);
+        if (!found) push('POLICY_REQUIRED_CELL_DEP', 'error', `requiredCellDeps[${i}]`, `Required ${dep.depType} dependency ${dep.outPoint} is absent`);
+      }
+    }
     if (typeScriptCount > policy.maxTypeScriptOutputs) {
       push('POLICY_MAX_TYPE_SCRIPTS', 'error', 'outputs', `${typeScriptCount} type-script outputs > allowed ${policy.maxTypeScriptOutputs}`);
     }
