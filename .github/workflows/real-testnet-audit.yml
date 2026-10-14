@@ -1,0 +1,75 @@
+name: CellGuard manually triggered chain audit
+on:
+  workflow_dispatch:
+    inputs:
+      tx_hash:
+        description: Public, committed CKB transaction hash (32-byte 0x hex)
+        type: string
+        required: true
+      profile_path:
+        description: Tracked strict v3 real-deployment policy JSON path, NOT .example.json
+        type: string
+        required: true
+      expected_status:
+        description: Expected policy outcome for this specific transaction
+        type: choice
+        options:
+          - pass
+          - policy-failed
+        required: true
+      network:
+        description: Chain to verify (Testnet is the intended evidence network)
+        type: choice
+        options:
+          - testnet
+          - mainnet
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: cellguard-audit-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate application and syntax
+        run: npm run check
+      - name: Confirm real profile is in repository
+        shell: bash
+        env:
+          PROFILE_PATH: ${{ inputs.profile_path }}
+        run: |
+          test -f "$PROFILE_PATH"
+          case "$PROFILE_PATH" in
+            *.example.json|*..*|/*) echo 'Refusing example or unsafe policy path'; exit 1 ;;
+          esac
+      - name: Historical read-only RPC audit
+        shell: bash
+        env:
+          AUDIT_TX_HASH: ${{ inputs.tx_hash }}
+          AUDIT_NETWORK: ${{ inputs.network }}
+          AUDIT_PROFILE_PATH: ${{ inputs.profile_path }}
+          AUDIT_EXPECTED_STATUS: ${{ inputs.expected_status }}
+        run: |
+          mkdir -p evidence
+          set +e
+          node cli/cellguard.mjs --online "$AUDIT_NETWORK" --lookup "$AUDIT_TX_HASH" --profile "$AUDIT_PROFILE_PATH" --format json --ci --output evidence/real-chain-report.json
+          cli_code=$?
+          set -e
+          AUDIT_CLI_EXIT_CODE="$cli_code" node scripts/validate-testnet-audit.mjs
+      - name: Save raw RPC report and provenance manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cellguard-chain-audit-${{ github.run_id }}
+          path: |
+            evidence/real-chain-report.json
+            evidence/real-chain-manifest.json
+          if-no-files-found: warn
+          retention-days: 30
