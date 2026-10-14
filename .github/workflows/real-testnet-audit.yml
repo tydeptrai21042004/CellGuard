@@ -17,6 +17,16 @@ on:
           - pass
           - policy-failed
         required: true
+      required_codes:
+        description: Comma-separated exact error codes required for expected policy-failed (leave empty for pass)
+        type: string
+        required: false
+        default: ''
+      min_confirmations:
+        description: Minimum canonical confirmations reported by RPC (default 6; not finality)
+        type: string
+        required: false
+        default: '6'
       network:
         description: Chain to verify (Testnet is the intended evidence network)
         type: choice
@@ -56,6 +66,8 @@ jobs:
           AUDIT_NETWORK: ${{ inputs.network }}
           AUDIT_PROFILE_PATH: ${{ inputs.profile_path }}
           AUDIT_EXPECTED_STATUS: ${{ inputs.expected_status }}
+          AUDIT_REQUIRED_CODES: ${{ inputs.required_codes }}
+          AUDIT_MIN_CONFIRMATIONS: ${{ inputs.min_confirmations }}
         run: |
           mkdir -p evidence
           set +e
