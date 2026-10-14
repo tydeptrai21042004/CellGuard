@@ -7,6 +7,14 @@ const policyPath = process.env.AUDIT_PROFILE_PATH;
 const expected = process.env.AUDIT_EXPECTED_STATUS;
 const network = process.env.AUDIT_NETWORK;
 const exitCode = Number(process.env.AUDIT_CLI_EXIT_CODE);
+const requiredCodes = (process.env.AUDIT_REQUIRED_CODES ?? '').split(',').map(x=>x.trim()).filter(Boolean);
+const minConfirmations = process.env.AUDIT_MIN_CONFIRMATIONS ?? '1';
+if (!/^(0|[1-9][0-9]{0,8})$/.test(minConfirmations) ||
+    requiredCodes.length > 32 || requiredCodes.some(x=> !/^[A-Z][A-Z0-9_]{1,79}$/.test(x)) ||
+    new Set(requiredCodes).size !== requiredCodes.length) {
+  throw Error('Invalid audit required codes or minimum confirmations');
+}
+
 const digest = data => createHash('sha256').update(data).digest('hex');
 if(!/^0x[0-9a-f]{64}$/.test(hash ?? '') || !['testnet','mainnet'].includes(network) ||
   !['pass','policy-failed'].includes(expected) || !policyPath || ![0,1,2,3].includes(exitCode)) {
@@ -27,15 +35,25 @@ let rawEvidence;
 try {rawEvidence=await readFile('evidence/real-chain-report.json','utf8');}
 catch {throw Error('CLI did not write real-chain-report.json');}
 const audit=JSON.parse(rawEvidence);
+const observedCodes = Array.isArray(audit.findings)
+  ? [...new Set(audit.findings.filter(x=>x?.severity==='error' && typeof x.code==='string').map(x=>x.code))].sort() : [];
+const hasExpectedCodes=requiredCodes.every(code=>observedCodes.includes(code));
+const confirmed=typeof audit.confirmations==='string' && /^\d+$/.test(audit.confirmations) &&
+  BigInt(audit.confirmations)>=BigInt(minConfirmations);
+const accounted=!!audit.accounting && audit.accounting.provenance==='role-level-accounting-not-coin-tracing' &&
+  Array.isArray(audit.accounting.inputs) && audit.accounting.inputs.length>0 &&
+  Array.isArray(audit.accounting.outputs) && audit.accounting.outputs.length>0 &&
+  Array.isArray(audit.accounting.roles);
 const valid=audit.mode==='committed-audit' && audit.network===network && audit.hash===hash &&
   audit.status===expected && audit.chainStatus==='committed' && audit.independentProof===false &&
-  audit.capacityFlow?.inputEvidence==='rpc-historical' &&
+  audit.capacityFlow?.inputEvidence==='rpc-historical' && accounted && confirmed && hasExpectedCodes &&
   (audit.checks?.historicalInputs==='resolved-from-canonical-parent-transactions') &&
   (expected==='pass'?exitCode===0:exitCode===1) &&
   (expected==='pass'?!audit.findings.some(f=>f.severity==='error'):audit.findings.some(f=>f.severity==='error'));
 const manifest={kind:'rpc-committed-transaction-policy-audit',realTestnetEvidence:network==='testnet',
   independentProof:false,txHash:hash,network,expectedStatus:expected,observedStatus:audit.status,
-  cliExitCode:exitCode,passed:valid,profilePath:policyPath,
+  cliExitCode:exitCode,passed:valid,profilePath:policyPath,requiredCodes,observedErrorCodes:observedCodes,
+  minConfirmations,observedConfirmations:audit.confirmations??null,accountingIncluded:accounted,
   profileSha256:digest(rawPolicy),rpcReportSha256:digest(rawEvidence),
   gitCommit:process.env.GITHUB_SHA||null,generatedAt:new Date().toISOString(),
   limitations:'Configured RPC attestations; no independent SPV proof, historical VM replay, broadcast, or finality guarantee.'};

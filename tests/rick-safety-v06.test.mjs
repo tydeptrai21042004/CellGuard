@@ -162,7 +162,7 @@ test('chain evidence validator refuses placeholder policies and unaudited chain 
     mkdirSync(join(dir,'evidence'));
     writeFileSync(join(dir,'profile.json'),JSON.stringify(finalizeProfile));
     const payload={mode:'committed-audit',network:'testnet',hash:txHash,status:'pass',chainStatus:'committed',
-      independentProof:false,capacityFlow:{inputEvidence:'rpc-historical'},
+      independentProof:false,confirmations:'12',accounting:{provenance:'role-level-accounting-not-coin-tracing',inputs:[{index:0}],outputs:[{index:0}],roles:[]},capacityFlow:{inputEvidence:'rpc-historical'},
       checks:{historicalInputs:'resolved-from-canonical-parent-transactions'},findings:[]};
     writeFileSync(join(dir,'evidence/real-chain-report.json'),JSON.stringify(payload));
     const env={...process.env,AUDIT_TX_HASH:txHash,AUDIT_NETWORK:'testnet',AUDIT_PROFILE_PATH:'profile.json',
@@ -187,5 +187,40 @@ test('chain evidence validator refuses placeholder policies and unaudited chain 
     writeFileSync(join(dir,'evidence/real-chain-report.json'),JSON.stringify(payload));
     const blocked=spawnSync(process.execPath,[script],{cwd:dir,env,encoding:'utf8'});
     assert.equal(blocked.status,1);
+  } finally {rmSync(dir,{recursive:true,force:true});}
+});
+
+test('real-chain evidence validator requires exact detection codes and enough confirmations', async () => {
+  const { mkdtempSync, mkdirSync, writeFileSync, rmSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const { spawnSync } = await import('node:child_process');
+  const dir=mkdtempSync(join(tmpdir(),'cellguard-evidence-gate-'));
+  try {
+    mkdirSync(join(dir,'evidence'));
+    const policy=structuredClone(finalizeProfile);
+    for(const [i,role] of Object.entries(Object.keys(policy.roles))) {
+      policy.roles[role].code_hash='0x'+'9'.repeat(64);
+      policy.roles[role].args='0x'+String(i+2).repeat(40);
+    }
+    policy.requiredCellDeps[0].out_point.tx_hash='0x'+'8'.repeat(64);
+    writeFileSync(join(dir,'policy.json'),JSON.stringify(policy));
+    const evidence={ mode:'committed-audit',network:'testnet',hash:txHash,
+      status:'policy-failed',chainStatus:'committed',confirmations:'9',independentProof:false,
+      capacityFlow:{inputEvidence:'rpc-historical'},
+      checks:{historicalInputs:'resolved-from-canonical-parent-transactions'},
+      accounting:{provenance:'role-level-accounting-not-coin-tracing',inputs:[{index:0}],outputs:[{index:0}],roles:[]},
+      findings:[{severity:'error',code:'CAPACITY_LEAK_DETECTED'}] };
+    const write=()=>writeFileSync(join(dir,'evidence/real-chain-report.json'),JSON.stringify(evidence));
+    const env={...process.env,AUDIT_TX_HASH:txHash,AUDIT_NETWORK:'testnet',AUDIT_PROFILE_PATH:'policy.json',
+      AUDIT_EXPECTED_STATUS:'policy-failed',AUDIT_CLI_EXIT_CODE:'1',
+      AUDIT_REQUIRED_CODES:'CAPACITY_LEAK_DETECTED',AUDIT_MIN_CONFIRMATIONS:'6'};
+    const script=new URL('../scripts/validate-testnet-audit.mjs',import.meta.url).pathname;
+    const run=()=>spawnSync(process.execPath,[script],{cwd:dir,env,encoding:'utf8'});
+    write();assert.equal(run().status,0);
+    env.AUDIT_REQUIRED_CODES='POLICY_REQUIRED_CELL_DEP';assert.equal(run().status,1);
+    env.AUDIT_REQUIRED_CODES='CAPACITY_LEAK_DETECTED';evidence.confirmations='2';write();assert.equal(run().status,1);
+    evidence.confirmations='9';evidence.accounting=undefined;write();assert.equal(run().status,1);
+    env.AUDIT_REQUIRED_CODES='CAPACITY_LEAK_DETECTED,not_valid';assert.equal(run().status,1);
   } finally {rmSync(dir,{recursive:true,force:true});}
 });

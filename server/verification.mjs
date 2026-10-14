@@ -324,12 +324,29 @@ export async function auditCommittedTransactionOnline({ network, hash, policy },
     capacityFlow: null, checks: { policy: 'not-verified', historicalInputs: 'stale-chain-state', finality: 'not-verified' },
     limitations: 'The audited block is no longer verifiably canonical at the end of the audit. No historical policy result is asserted.'
   };
+  // Role-wise accounting is a transparent policy summary, not a claim that individual
+  // fungible shannons can be traced to a specific input outpoint.
+  const account = report.capacityFlow?.roleBalances ?? {};
+  const roles = Object.entries(account).map(([role, amounts]) => ({ role, ...amounts }));
+  const outputBreakdown = tx.outputs.map((out, index) => ({
+    index, capacityCKB: formatCkb(bigintHex(out.capacity, `outputs[${index}].capacity`)),
+    lock: out.lock,
+    role: Object.entries(parsedPolicy.roles ?? {}).find(([, lock]) =>
+      lock.codeHash === out.lock.code_hash.toLowerCase() && lock.hashType === out.lock.hash_type &&
+      lock.args === out.lock.args.toLowerCase())?.[0] ?? 'unclassified'
+  }));
+  const inputBreakdown = inputs.map((cell, index) => ({
+    index, outPoint: cell.outPoint, capacityCKB: formatCkb(bigintHex(cell.capacity, `inputs[${index}].capacity`)),
+    role: Object.entries(parsedPolicy.roles ?? {}).find(([, lock]) =>
+      lock.codeHash === cell.lock.code_hash.toLowerCase() && lock.hashType === cell.lock.hash_type &&
+      lock.args === cell.lock.args.toLowerCase())?.[0] ?? 'unclassified'
+  }));
   return {
     ...inclusion, mode: 'committed-audit', chainStatus: 'committed', status: report.errorCount ? 'policy-failed' : 'pass',
     policyVersion: report.policyVersion, profile: report.profile, checks: { policy: report.errorCount ? 'fail' : 'pass',
       historicalInputs: 'resolved-from-canonical-parent-transactions', inclusion: inclusion.proof?.status ?? 'unavailable',
       historicalVmReplay: 'not-performed', finality: 'not-independently-verified' },
-    findings: report.findings, capacityFlow: report.capacityFlow, transaction: { inputCount: inputs.length, outputCount: report.outputCount,
+    findings: report.findings, capacityFlow: report.capacityFlow, accounting: { roles, inputs: inputBreakdown, outputs: outputBreakdown, feeCKB: report.capacityFlow?.feeCKB ?? null, provenance: 'role-level-accounting-not-coin-tracing' }, transaction: { inputCount: inputs.length, outputCount: report.outputCount,
       outputCapacityCKB: report.totalCapacityCKB },
     limitations: 'Historical inputs and inclusion are attested by the selected RPC node. This is an application-policy audit, not an independent consensus proof, replay of VM scripts at the historical state, or a finality guarantee.'
   };
