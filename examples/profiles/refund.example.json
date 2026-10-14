@@ -50,5 +50,15 @@
       "operator": "at-least",
       "value": "0x200000000000000a"
     }
+  ],
+  "roleRequirements": [
+    {
+      "role": "campaign",
+      "minInputCount": 1
+    },
+    {
+      "role": "contributor",
+      "minOutputCount": 1
+    }
   ]
 }

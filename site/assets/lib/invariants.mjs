@@ -46,20 +46,20 @@ function parseInputEvidence(rawInputs, txInput) {
 export function evaluateInvariants(txInput, parsedOutputs, policy, { resolvedInputs, inputEvidence = 'unverified' } = {}) {
   const findings = [];
   const push = (code, severity, path, detail) => findings.push({ code, severity, path, detail });
-  const rulesConfigured = policy.capacityFlow.length > 0 || policy.sinceRules.length > 0 || policy.allowedInputRoles.length > 0 || policy.maxFee !== null;
+  const rulesConfigured = policy.capacityFlow.length > 0 || policy.sinceRules.length > 0 || policy.allowedInputRoles.length > 0 || policy.roleRequirements.length > 0 || policy.maxFee !== null;
   const inputs = resolvedInputs === undefined ? null : parseInputEvidence(resolvedInputs, txInput);
   const roleNames = Object.keys(policy.roles);
-  const aggregate = Object.fromEntries(roleNames.map(role => [role, { input: 0n, output: 0n }]));
+  const aggregate = Object.fromEntries(roleNames.map(role => [role, { input: 0n, output: 0n, inputCount: 0, outputCount: 0 }]));
   for (const output of parsedOutputs) {
     const role = roleNames.find(name => sameScript(output.lock, policy.roles[name]));
-    if (role) aggregate[role].output += output.capacity;
+    if (role) { aggregate[role].output += output.capacity; aggregate[role].outputCount++; }
     if (policy.allowedOutputRoles.length && !policy.allowedOutputRoles.includes(role)) {
       push('POLICY_OUTPUT_ROLE_FORBIDDEN', 'error', `outputs[${output.index}].lock`, `Output lock is not in the configured allowedOutputRoles list`);
     }
   }
   if (inputs) for (const cell of inputs) {
     const role = roleNames.find(name => sameScript(cell.lock, policy.roles[name]));
-    if (role) aggregate[role].input += cell.capacity;
+    if (role) { aggregate[role].input += cell.capacity; aggregate[role].inputCount++; }
     if (policy.allowedInputRoles.length && !policy.allowedInputRoles.includes(role)) {
       push('POLICY_INPUT_ROLE_FORBIDDEN', 'error', `inputs[${cell.index}]`, 'Input lock is not in the configured allowedInputRoles list');
     }
@@ -74,6 +74,29 @@ export function evaluateInvariants(txInput, parsedOutputs, policy, { resolvedInp
   const fee = totalInput === null ? null : totalInput - totalOutput;
   if (inputs && fee < 0n) push('NEGATIVE_FEE', 'error', 'inputs', `Output capacity exceeds input capacity by ${formatCkb(-fee)} CKB (DAO interest or other exceptional accounting requires separate verification)`);
   if (inputs && policy.maxFee !== null && fee > policy.maxFee) push('POLICY_FEE_EXCEEDED', 'error', 'inputs', `Fee ${formatCkb(fee)} CKB exceeds allowed ${formatCkb(policy.maxFee)} CKB`);
+  // Output requirements can be checked without input metadata; input requirements never assume missing evidence means zero.
+  for (const [i, rule] of policy.roleRequirements.entries()) {
+    const role = aggregate[rule.role];
+    const path = `roleRequirements[${i}]`;
+    if (role.outputCount < rule.minOutputCount || role.outputCount > rule.maxOutputCount) {
+      push('POLICY_ROLE_OUTPUT_COUNT', 'error', path,
+        `${rule.role}: ${role.outputCount} output(s); expected ${rule.minOutputCount}–${rule.maxOutputCount}`);
+    }
+    if (role.output < rule.minOutputCapacity || role.output > rule.maxOutputCapacity) {
+      push('POLICY_ROLE_OUTPUT_CAPACITY', 'error', path,
+        `${rule.role}: ${formatCkb(role.output)} CKB output; required ${formatCkb(rule.minOutputCapacity)}–${formatCkb(rule.maxOutputCapacity)} CKB`);
+    }
+    if (inputs) {
+      if (role.inputCount < rule.minInputCount || role.inputCount > rule.maxInputCount) {
+        push('POLICY_ROLE_INPUT_COUNT', 'error', path,
+          `${rule.role}: ${role.inputCount} input(s); expected ${rule.minInputCount}–${rule.maxInputCount}`);
+      }
+      if (role.input < rule.minInputCapacity || role.input > rule.maxInputCapacity) {
+        push('POLICY_ROLE_INPUT_CAPACITY', 'error', path,
+          `${rule.role}: ${formatCkb(role.input)} CKB input; required ${formatCkb(rule.minInputCapacity)}–${formatCkb(rule.maxInputCapacity)} CKB`);
+      }
+    }
+  }
   const net = name => aggregate[name].output - aggregate[name].input;
   if (inputs) for (const [i, rule] of policy.capacityFlow.entries()) {
     const path = `capacityFlow[${i}]`;
@@ -102,7 +125,8 @@ export function evaluateInvariants(txInput, parsedOutputs, policy, { resolvedInp
     }
   }
   const roleBalances = Object.fromEntries(roleNames.map(role => [role, {
-    inputCKB: formatCkb(aggregate[role].input), outputCKB: formatCkb(aggregate[role].output), netCKB: formatCkb(net(role))
+    inputCKB: formatCkb(aggregate[role].input), outputCKB: formatCkb(aggregate[role].output), netCKB: formatCkb(net(role)),
+    inputCount: aggregate[role].inputCount, outputCount: aggregate[role].outputCount
   }]));
   return { findings, roleBalances, feeCKB: fee === null ? null : formatCkb(fee), inputEvidence: inputs ? inputEvidence : 'missing', inputCount: inputs?.length ?? 0 };
 }

@@ -175,3 +175,9 @@ Run `npm run check` to verify the deterministic analyzer, v2 policy constraints,
 A future RPC integration, if explicitly designed and opt-in, would require new CSP/network policies, chain-specific validation, independent verification against real transactions, abuse prevention, and security review. **This release remains deliberately offline and read-only.**
 
 More documents are in `docs/`. The repository is an MIT-licensed experimental developer tool, not an audit certificate or funding approval.
+
+### Rick's CrowdCell review: role requirements and reproducible evidence
+
+CellGuard v3 profiles now support `roleRequirements` for exact input/output lock-role presence, aggregate capacity and count bounds. The `finalize`, `pledge` and `refund` example profiles include basic role requirements, and `npm run test:policies` runs **13 exact synthetic safety scenarios** including a 474 CKB finalizer diversion, required dep, `since` and missing source/recipient cases. `npm run check` runs the regression suite.
+
+The new [policy and Testnet audit guide](docs/12_RICK_POLICY_ROLES_REORG_AND_CHAIN_EVIDENCE.md) covers historical reorg protection and how to run a **manual GitHub Actions historical RPC audit** of a real transaction with a real, non-example profile. Local fixture metadata must not be presented as Testnet evidence; real profile hashes and business rules must be independently checked before claiming application safety.

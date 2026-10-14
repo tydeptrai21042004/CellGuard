@@ -23,7 +23,7 @@ export const V2_POLICY = Object.freeze({
 export const V3_POLICY = Object.freeze({
   ...V2_POLICY, version: 3, maxTotalOutputCapacityCKB: null, maxFreeCapacityCKBPerOutput: null,
   profile: 'generic', roles: {}, allowedInputRoles: [], allowedOutputRoles: [],
-  capacityFlow: [], sinceRules: [], maxFeeCKB: null
+  capacityFlow: [], sinceRules: [], roleRequirements: [], maxFeeCKB: null
 });
 function integerInRange(value, name, max) {
   if (!Number.isSafeInteger(value) || value < 0 || value > max) {
@@ -121,6 +121,33 @@ function capacityRules(value, roles) {
       minSourceInput: parseCkbDecimal(r.minSourceInputCKB ?? '0', `${path}.minSourceInputCKB`) });
   }));
 }
+/** Demand a named lock role in real inputs/outputs, rather than relying on vacuous flow checks. */
+function roleRequirements(value, roles) {
+  if (!Array.isArray(value) || value.length > 64) throw new Error('roleRequirements: expected at most 64 requirements');
+  const seen = new Set();
+  return Object.freeze(value.map((raw, i) => {
+    const path = `roleRequirements[${i}]`;
+    if (!isRecord(raw) || Object.keys(raw).some(key => ![
+      'role','minInputCount','maxInputCount','minOutputCount','maxOutputCount',
+      'minInputCapacityCKB','maxInputCapacityCKB','minOutputCapacityCKB','maxOutputCapacityCKB'
+    ].includes(key))) throw new Error(`${path}: unknown field or invalid object`);
+    const [role] = roleList([raw.role], `${path}.role`, roles);
+    if (seen.has(role)) throw new Error(`${path}: duplicate role ${role}`);
+    seen.add(role);
+    const minInputCount = integerInRange(raw.minInputCount ?? 0, `${path}.minInputCount`, 4096);
+    const maxInputCount = integerInRange(raw.maxInputCount ?? 4096, `${path}.maxInputCount`, 4096);
+    const minOutputCount = integerInRange(raw.minOutputCount ?? 0, `${path}.minOutputCount`, 512);
+    const maxOutputCount = integerInRange(raw.maxOutputCount ?? 512, `${path}.maxOutputCount`, 512);
+    if (minInputCount > maxInputCount || minOutputCount > maxOutputCount) throw new Error(`${path}: minimum count exceeds maximum`);
+    const minInputCapacity = parseCkbDecimal(raw.minInputCapacityCKB ?? '0', `${path}.minInputCapacityCKB`);
+    const maxInputCapacity = parseCkbDecimal(raw.maxInputCapacityCKB ?? '184467440737.09551615', `${path}.maxInputCapacityCKB`);
+    const minOutputCapacity = parseCkbDecimal(raw.minOutputCapacityCKB ?? '0', `${path}.minOutputCapacityCKB`);
+    const maxOutputCapacity = parseCkbDecimal(raw.maxOutputCapacityCKB ?? '184467440737.09551615', `${path}.maxOutputCapacityCKB`);
+    if (minInputCapacity > maxInputCapacity || minOutputCapacity > maxOutputCapacity) throw new Error(`${path}: minimum capacity exceeds maximum`);
+    return Object.freeze({ role, minInputCount, maxInputCount, minOutputCount, maxOutputCount,
+      minInputCapacity, maxInputCapacity, minOutputCapacity, maxOutputCapacity });
+  }));
+}
 function sinceRules(value, roles) {
   if (!Array.isArray(value) || value.length > 64) throw new Error('sinceRules: expected at most 64 rules');
   return Object.freeze(value.map((rule, i) => {
@@ -215,5 +242,6 @@ export function parsePolicy(input) {
     allowedInputRoles: roleList(p.allowedInputRoles, 'allowedInputRoles', roles),
     allowedOutputRoles: roleList(p.allowedOutputRoles, 'allowedOutputRoles', roles),
     capacityFlow: capacityRules(p.capacityFlow, roles), sinceRules: sinceRules(p.sinceRules, roles),
+    roleRequirements: roleRequirements(p.roleRequirements, roles),
     maxFee: p.maxFeeCKB === null ? null : parseCkbDecimal(p.maxFeeCKB, 'maxFeeCKB') });
 }

@@ -16,7 +16,7 @@ Usage: node cli/cellguard.mjs --transaction tx.json --profile profile.json [--fo
        node cli/cellguard.mjs --transaction tx.json --compare old.json
 --profile and --policy are aliases for JSON policy file path. No embedded CrowdCell keys are assumed.
 --input-cells accepts externally supplied UNVERIFIED input metadata for deterministic tests only.
---ci fails closed for missing/untrusted input evidence; --output saves JSON evidence to a file.
+--ci fails closed for missing/untrusted input evidence or lookup without a profile; --output saves JSON evidence to a file.
 Online verification sends signed witnesses to your configured CKB RPC, but does NOT broadcast.
 Exit: 0 all required checks passed; 1 policy failure; 2 invalid input/transport; 3 inconclusive/untrusted verification.
 `;
@@ -103,7 +103,7 @@ async function main() {
     if (report.status !== 'pass' || (config['--fail-on-warning'] && report.findings.some(x => x.severity === 'warning'))) return 1;
     return 0;
   }
-  if (report.mode === 'chain-lookup') return report.status === 'committed' ? 0 : 1;
+  if (report.mode === 'chain-lookup') return config['--ci'] ? 3 : report.status === 'committed' ? 0 : 1;
   if (report.mode === 'indexed-output-diff') return 0;
   if (report.errorCount && !report.findings.every(f => f.code === 'INPUT_EVIDENCE_REQUIRED')) return 1;
   if (report.capacityFlow?.inputEvidence === 'provided-unverified') return 3;

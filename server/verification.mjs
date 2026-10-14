@@ -109,7 +109,7 @@ export async function verifyTransactionOnline({ network, transaction, policy }, 
     } catch (error) { fail('INPUT_RESOLUTION_INVALID', `Invalid live-cell metadata: ${errorMessage(error)}`, 502); }
   }
   const findings = [...local.findings.map(f => ({ severity: f.severity, code: f.code, path: f.path, detail: f.detail }))];
-  for (const cell of cells.filter(x => x.status !== 'live')) findings.push({ severity: 'error', code: 'INPUT_NOT_LIVE', detail: `Input #${cell.index} is ${cell.status} according to the RPC` });
+  for (const cell of cells.filter(x => x.status !== 'live')) findings.push({ severity: 'error', code: 'INPUT_NOT_LIVE', detail: `Input #${cell.index} is ${cell.status} at the selected RPC. This prevents NEW preflight; it does not prove the transaction was invalid. For an already committed transaction use --online NETWORK --lookup HASH --profile POLICY to audit historical parent outputs.` });
   if (fee !== null && fee < 0n) findings.push({ severity: 'error', code: 'NEGATIVE_FEE', detail: `Outputs exceed inputs by ${formatCkb(-fee)} CKB` });
   // This is a preflight policy budget, not a universal CKB protocol fee limit.
   if (fee !== null && fee >= 0n && fee > 100n * 100000000n) findings.push({ severity: 'warning', code: 'HIGH_FEE', detail: `Observed fee ${formatCkb(fee)} CKB exceeds the default 100 CKB review threshold` });
@@ -249,6 +249,12 @@ export async function auditCommittedTransactionOnline({ network, hash, policy },
     limitations: 'Historical audit requires a transaction committed in a canonical block according to the selected RPC.'
   };
   const record = await rpc('get_transaction', [txHash]);
+  // The target can be reorged between chain lookup and fetching the raw transaction.
+  if (record?.tx_status?.status !== 'committed' || String(record?.tx_status?.block_hash).toLowerCase() !== inclusion.blockHash) return {
+    ...inclusion, mode: 'committed-audit', chainStatus: 'reorg-risk', status: 'inconclusive',
+    findings: [{ severity: 'warning', code: 'AUDIT_TARGET_CHANGED', detail: 'Transaction commitment changed while resolving historical inputs; retry against a stable node' }],
+    limitations: 'Canonical commitment was not stable across the historical audit; no policy compliance is asserted.'
+  };
   const raw = record?.transaction?.inner ?? record?.transaction;
   if (!raw || typeof raw !== 'object') fail('HISTORY_UNAVAILABLE', 'RPC did not return the committed transaction body', 503);
   if (raw.hash !== undefined && (typeof raw.hash !== 'string' || raw.hash.toLowerCase() !== txHash))
@@ -304,6 +310,20 @@ export async function auditCommittedTransactionOnline({ network, hash, policy },
   let report;
   try { report = analyzeTransaction(tx, policy, { resolvedInputs: inputs, inputEvidence: 'rpc-historical' }); }
   catch (err) { fail('HISTORICAL_POLICY_INVALID', errorMessage(err), 502); }
+  // A final canonical check prevents a mid-audit reorg from producing a trusted policy PASS.
+  let stillCanonical = false;
+  try {
+    const canonical = await rpc('get_block_hash', [inclusion.blockNumber]);
+    const currentTip = validHeader(await rpc('get_tip_header', []));
+    stillCanonical = typeof canonical === 'string' && canonical.toLowerCase() === inclusion.blockHash &&
+      BigInt(currentTip.number) >= BigInt(inclusion.blockNumber);
+  } catch { /* RPC failure is inconclusive, never canonical by assumption. */ }
+  if (!stillCanonical) return {
+    ...inclusion, mode: 'committed-audit', chainStatus: 'reorg-risk', status: 'inconclusive',
+    findings: [{ severity: 'warning', code: 'AUDIT_CHAIN_CHANGED', detail: 'Canonical block or node tip changed during historical input resolution; retry the audit' }],
+    capacityFlow: null, checks: { policy: 'not-verified', historicalInputs: 'stale-chain-state', finality: 'not-verified' },
+    limitations: 'The audited block is no longer verifiably canonical at the end of the audit. No historical policy result is asserted.'
+  };
   return {
     ...inclusion, mode: 'committed-audit', chainStatus: 'committed', status: report.errorCount ? 'policy-failed' : 'pass',
     policyVersion: report.policyVersion, profile: report.profile, checks: { policy: report.errorCount ? 'fail' : 'pass',

@@ -34,5 +34,15 @@
       "feeAllowanceCKB": "0.1",
       "minSourceInputCKB": "1"
     }
+  ],
+  "roleRequirements": [
+    {
+      "role": "contributor",
+      "minInputCount": 1
+    },
+    {
+      "role": "campaign",
+      "minOutputCount": 1
+    }
   ]
 }

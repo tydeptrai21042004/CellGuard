@@ -55,5 +55,18 @@
       },
       "dep_type": "code"
     }
+  ],
+  "roleRequirements": [
+    {
+      "role": "campaign",
+      "minInputCount": 1
+    },
+    {
+      "role": "beneficiary",
+      "minOutputCount": 1
+    },
+    {
+      "role": "finalizer"
+    }
   ]
 }
