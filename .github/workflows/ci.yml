@@ -1,0 +1,35 @@
+name: CellGuard safety regression
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: cellguard-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '22']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Check source, deployment, and unit regressions
+        run: npm run check
+      - name: CrowdCell synthetic policy safety gate
+        run: npm run test:policies
+      - name: Save regression report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: policy-report-node-${{ matrix.node }}
+          path: evidence/ci-policy-report.json
+          if-no-files-found: error
+          retention-days: 14
