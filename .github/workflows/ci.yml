@@ -24,9 +24,24 @@ jobs:
       - name: Check source, deployment, and unit regressions
         run: npm run check
       - name: CrowdCell synthetic policy safety gate
-        run: npm run test:policies
-      - name: Save regression report
+        # Generate the report even when the build/unit check failed, for CI evidence.
+        if: ${{ !cancelled() }}
+        run: |
+          npm run test:policies
+          test -s evidence/ci-policy-report.json
+      - name: Detect regression report
         if: always()
+        id: policy_report
+        shell: bash
+        run: |
+          if test -s evidence/ci-policy-report.json; then
+            echo 'exists=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'exists=false' >> "$GITHUB_OUTPUT"
+            echo '::notice::No policy regression report was generated; inspect the preceding step.'
+          fi
+      - name: Save regression report
+        if: ${{ always() && steps.policy_report.outputs.exists == 'true' }}
         uses: actions/upload-artifact@v4
         with:
           name: policy-report-node-${{ matrix.node }}
