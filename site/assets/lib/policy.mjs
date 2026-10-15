@@ -100,14 +100,21 @@ function capacityRules(value, roles) {
   const ids = new Set();
   return Object.freeze(value.map((r, i) => {
     const path = `capacityFlow[${i}]`;
-    if (!isRecord(r) || !['max-net-gain','min-recipient-net-gain'].includes(r.kind)) throw new Error(`${path}: invalid rule kind`);
+    if (!isRecord(r) || !['max-net-gain','min-recipient-net-gain','preserve-typed-cell'].includes(r.kind)) throw new Error(`${path}: invalid rule kind`);
     if (typeof r.id !== 'string' || !/^[A-Za-z0-9_-]{1,64}$/.test(r.id) || ids.has(r.id)) throw new Error(`${path}.id: invalid or duplicate id`);
     ids.add(r.id);
-    const known = r.kind === 'max-net-gain' ? ['id','kind','role','maxGainCKB'] : ['id','kind','source','destinations','minRatio','feeAllowanceCKB','minSourceInputCKB'];
+    const known = r.kind === 'max-net-gain' ? ['id','kind','role','maxGainCKB']
+      : r.kind === 'preserve-typed-cell' ? ['id','kind','type']
+      : ['id','kind','source','destinations','minRatio','feeAllowanceCKB','minSourceInputCKB'];
     if (Object.keys(r).some(k => !known.includes(k))) throw new Error(`${path}: unknown field`);
     if (r.kind === 'max-net-gain') {
       const [role] = roleList([r.role], `${path}.role`, roles);
       return Object.freeze({ id: r.id, kind: r.kind, role, maxGain: parseCkbDecimal(r.maxGainCKB ?? '0', `${path}.maxGainCKB`) });
+    }
+    if (r.kind === 'preserve-typed-cell') {
+      // The exact type script identifies the campaign Cell independently of its lock.
+      // Demand one input and one successor output to avoid silent split or disappearance.
+      return Object.freeze({ id: r.id, kind: r.kind, type: script(r.type, `${path}.type`) });
     }
     const [source] = roleList([r.source], `${path}.source`, roles);
     const destinations = roleList(r.destinations, `${path}.destinations`, roles);

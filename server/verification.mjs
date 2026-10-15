@@ -66,7 +66,7 @@ function inputStatus(result, i) {
   if (result.status !== 'live') return { index: i, status: result.status, capacity: null };
   const output = result.cell?.output;
   if (!output || typeof output !== 'object') fail('RPC_RESPONSE_INVALID', `inputs[${i}]: missing live output`);
-  return { index: i, status: 'live', capacity: bigintHex(output.capacity, `inputs[${i}].capacity`).toString(), lock: output.lock ?? null };
+  return { index: i, status: 'live', capacity: bigintHex(output.capacity, `inputs[${i}].capacity`).toString(), lock: output.lock ?? null, type: output.type };
 }
 function sumOutputs(tx) { return tx.outputs.reduce((total, out) => total + BigInt(out.capacity), 0n); }
 function witnessCount(tx) { return tx.witnesses.length; }
@@ -104,7 +104,8 @@ export async function verifyTransactionOnline({ network, transaction, policy }, 
   if (allLive && cells.every(c => c.lock)) {
     try {
       const resolvedInputs = cells.map((cell, index) => ({ index,
-        outPoint: points[index], capacity: '0x' + BigInt(cell.capacity).toString(16), lock: cell.lock }));
+        outPoint: points[index], capacity: '0x' + BigInt(cell.capacity).toString(16), lock: cell.lock,
+        ...(cell.type === undefined ? {} : { type: cell.type }) }));
       local = analyzeTransaction(tx, policy, { resolvedInputs, inputEvidence: 'rpc-live' });
     } catch (error) { fail('INPUT_RESOLUTION_INVALID', `Invalid live-cell metadata: ${errorMessage(error)}`, 502); }
   }
@@ -298,7 +299,8 @@ export async function auditCommittedTransactionOnline({ network, hash, policy },
     try {
       bigintHex(output.capacity, `inputs[${index}].capacity`);
       validateScript(output.lock, `inputs[${index}].lock`, { strict: true });
-      return { index, outPoint: point, capacity: output.capacity, lock: output.lock };
+      return { index, outPoint: point, capacity: output.capacity, lock: output.lock,
+        ...(Object.hasOwn(output, 'type') ? { type: output.type } : {}) };
     } catch { missing.push(`inputs[${index}]: malformed historical output`); return null; }
   });
   if (missing.length) return {
@@ -330,13 +332,14 @@ export async function auditCommittedTransactionOnline({ network, hash, policy },
   const roles = Object.entries(account).map(([role, amounts]) => ({ role, ...amounts }));
   const outputBreakdown = tx.outputs.map((out, index) => ({
     index, capacityCKB: formatCkb(bigintHex(out.capacity, `outputs[${index}].capacity`)),
-    lock: out.lock,
+    lock: out.lock, type: out.type ?? null,
     role: Object.entries(parsedPolicy.roles ?? {}).find(([, lock]) =>
       lock.codeHash === out.lock.code_hash.toLowerCase() && lock.hashType === out.lock.hash_type &&
       lock.args === out.lock.args.toLowerCase())?.[0] ?? 'unclassified'
   }));
   const inputBreakdown = inputs.map((cell, index) => ({
     index, outPoint: cell.outPoint, capacityCKB: formatCkb(bigintHex(cell.capacity, `inputs[${index}].capacity`)),
+    type: cell.type ?? null,
     role: Object.entries(parsedPolicy.roles ?? {}).find(([, lock]) =>
       lock.codeHash === cell.lock.code_hash.toLowerCase() && lock.hashType === cell.lock.hash_type &&
       lock.args === cell.lock.args.toLowerCase())?.[0] ?? 'unclassified'

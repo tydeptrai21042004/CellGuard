@@ -134,13 +134,14 @@ export function analyzeTransaction(txInput, policyInput, context = {}) {
     typeScriptCount,
     findings,
     capacityFlow: invariants ? { roles: invariants.roleBalances, feeCKB: invariants.feeCKB,
-      inputEvidence: invariants.inputEvidence, resolvedInputCount: invariants.inputCount } : null,
+      inputEvidence: invariants.inputEvidence, resolvedInputCount: invariants.inputCount,
+      protectedCells: invariants.protectedCells } : null,
     outputs: outputDetails,
     checks: {
       capacity: !findings.some(f => f.code === 'CAPACITY_INSUFFICIENT'),
       lockPolicy: !findings.some(f => ['POLICY_LOCK_NOT_ALLOWED', 'POLICY_LOCK_SCRIPT_NOT_ALLOWED'].includes(f.code)),
       typePolicy: !findings.some(f => ['POLICY_TYPE_FORBIDDEN', 'POLICY_TYPE_NOT_ALLOWED', 'POLICY_TYPE_SCRIPT_NOT_ALLOWED', 'POLICY_TYPE_REQUIRED', 'POLICY_MAX_TYPE_SCRIPTS'].includes(f.code)),
-      intent: !findings.some(f => f.code.startsWith('POLICY_REQUIRED_OUTPUT') || f.code === 'CAPACITY_LEAK_DETECTED' || f.code === 'POLICY_UNAUTHORIZED_NET_GAIN'),
+      intent: !findings.some(f => f.code.startsWith('POLICY_REQUIRED_OUTPUT') || f.code === 'CAPACITY_LEAK_DETECTED' || f.code === 'POLICY_UNAUTHORIZED_NET_GAIN' || f.code.startsWith('PROTECTED_CELL_')),
       constraints: !findings.some(f => f.severity === 'error' && f.code.startsWith('POLICY_') && !['POLICY_LOCK_NOT_ALLOWED', 'POLICY_LOCK_SCRIPT_NOT_ALLOWED', 'POLICY_TYPE_FORBIDDEN', 'POLICY_TYPE_NOT_ALLOWED', 'POLICY_TYPE_SCRIPT_NOT_ALLOWED'].includes(f.code))
     },
     verification: {

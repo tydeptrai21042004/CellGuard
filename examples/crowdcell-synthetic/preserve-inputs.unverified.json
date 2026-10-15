@@ -1,0 +1,34 @@
+[
+  {
+    "index": 0,
+    "outPoint": {
+      "tx_hash": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "index": "0x0"
+    },
+    "capacity": "0xdf8475800",
+    "lock": {
+      "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "hash_type": "type",
+      "args": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "type": {
+      "code_hash": "0x4444444444444444444444444444444444444444444444444444444444444444",
+      "hash_type": "type",
+      "args": "0x5555555555555555555555555555555555555555555555555555555555555555"
+    }
+  },
+  {
+    "index": 1,
+    "outPoint": {
+      "tx_hash": "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "index": "0x0"
+    },
+    "capacity": "0x2540be400",
+    "lock": {
+      "code_hash": "0x1111111111111111111111111111111111111111111111111111111111111111",
+      "hash_type": "type",
+      "args": "0xcccccccccccccccccccccccccccccccccccccccc"
+    },
+    "type": null
+  }
+]

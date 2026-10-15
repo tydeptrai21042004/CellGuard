@@ -14,6 +14,11 @@ const base = {
     tx:await load('crowdcell-synthetic/finalize-valid.json'),
     cells:await load('crowdcell-synthetic/finalize-inputs.unverified.json')
   },
+  preserve: {
+    profile:await load('profiles/crowdcell-preserve.example.json'),
+    tx:await load('crowdcell-synthetic/preserve-valid.json'),
+    cells:await load('crowdcell-synthetic/preserve-inputs.unverified.json')
+  },
   refund: {
     profile:await load('profiles/refund.example.json'),
     tx:await load('crowdcell-synthetic/refund-valid.json'),
@@ -40,6 +45,42 @@ add('finalize-campaign-input-missing','finalize',['POLICY_ROLE_INPUT_COUNT','POL
 });
 add('finalizer-self-funded-change-allowed','finalize',[],x => {
   x.cells[1].capacity=hex(shannons(1000));x.tx.outputs[1].capacity=hex(shannons(1000));
+});
+// Rick's clarified contract rule: campaign type-group output must retain the FULL
+// campaign input capacity. Unlike the legacy beneficiary-transfer example, the fee
+// is funded by the finalizer. These remain synthetic, not recovered April transactions.
+add('typed-campaign-preservation-valid','preserve',[]);
+add('typed-campaign-474-ckb-diversion','preserve',
+  ['PROTECTED_CELL_CAPACITY_SHRINK','POLICY_UNAUTHORIZED_NET_GAIN'],x => {
+    x.tx=structuredClone(base.preserve.tx);
+    x.tx.outputs[0].capacity=hex(shannons(126));
+    x.tx.outputs[1].capacity=hex(shannons(474));
+    x.tx.outputs.push({...structuredClone(x.tx.outputs[1]),capacity:hex(shannons(100)-shannons(1)/10n)});
+    x.tx.outputs_data.push('0x');
+  });
+add('typed-campaign-capacity-charged-as-fee','preserve',['PROTECTED_CELL_CAPACITY_SHRINK'],x => {
+  x.tx.outputs[0].capacity=hex(shannons(600)-1n);
+  x.tx.outputs[1].capacity=hex(shannons(100));
+});
+add('typed-campaign-unrelated-output-same-lock','preserve',['POLICY_ROLE_OUTPUT_COUNT','PROTECTED_CELL_CAPACITY_SHRINK'],x => {
+  x.tx.outputs[0].capacity=hex(shannons(400));
+  x.tx.outputs.push({capacity:hex(shannons(200)),lock:structuredClone(x.tx.outputs[0].lock),type:null});
+  x.tx.outputs_data.push('0x');
+});
+add('typed-campaign-missing-successor-type','preserve',['PROTECTED_CELL_COUNT_MISMATCH'],x => {
+  x.tx.outputs[0].type=null;
+});
+add('typed-campaign-duplicate-successor-type','preserve',['POLICY_ROLE_OUTPUT_COUNT','PROTECTED_CELL_COUNT_MISMATCH'],x => {
+  x.tx.outputs[0].capacity=hex(shannons(300));
+  x.tx.outputs.push(structuredClone(x.tx.outputs[0]));
+  x.tx.outputs_data.push('0x');
+});
+add('typed-campaign-missing-input-type-evidence','preserve',['INPUT_TYPE_EVIDENCE_REQUIRED'],x => {
+  delete x.cells[0].type;
+});
+add('typed-campaign-finalizer-owns-larger-change','preserve',[],x => {
+  x.cells[1].capacity=hex(shannons(1000));
+  x.tx.outputs[1].capacity=hex(shannons(1000)-shannons(1)/10n);
 });
 add('refund-valid','refund',[]);
 add('refund-missing-dependency','refund',['POLICY_REQUIRED_CELL_DEP'],x => {x.tx.cell_deps=[];});

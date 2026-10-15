@@ -2,6 +2,14 @@
 
 CellGuard now supports **V3 capacity-flow policies**, exact role-based lock accounting, required transaction dependencies, input-aware net-gain checks, configurable `since` comparisons, read-only RPC preflight, and **committed-transaction historical policy auditing**. The synthetic 474 CKB finalizer-leak regression is included, along with pledge/finalize/refund policy examples.
 
+### Update: Rick’s confirmed campaign-capacity rule (October 2026)
+
+Rick clarified that his old v1.1 finalize bug **shrunk the typed campaign Cell from C to its occupied minimum M and paid C−M (≈474 CKB) to the finalizer**. The correct finalize output must retain **at least C**, and miner fees must come from the finalizer’s own Cells. The old transaction hash is unavailable; **this is synthetic evidence only**.
+
+CellGuard now offers the opt-in v3 `preserve-typed-cell` capacity-flow rule, keyed by **exact type script** and enforcing one input + one output and `capacity_out >= capacity_in`, with **no fee allowance**. Read-only live and historical RPC paths retain input type metadata; omitted type evidence fails closed. The output includes a `capacityFlow.protectedCells` breakdown. This rule adds protection against untyped lookalike outputs with the same lock hiding campaign shrinkage; it is not a claim of actual CrowdCell code execution or independent verification of `error 17`.
+
+See **[Rick’s capacity-preservation protocol](docs/14_RICK_CAMPAIGN_CAPACITY_PRESERVATION.md)** and `examples/profiles/crowdcell-preserve.example.json`. Do not use the older beneficiary-transfer `finalize.example.json` as proof of this specific invariant.
+
 Start with **[V3 documentation and CLI examples](docs/10_V05_CAPACITY_FLOW.md)**. The example lock scripts and OutPoints are synthetic and **must not be used as real CrowdCell contract identifiers**. The test suite uses mocked RPC; it does not demonstrate the real CrowdCell defect on Testnet. No transaction is broadcast.
 
 ## Previously added in v0.4: live, read-only CKB verification
@@ -178,6 +186,6 @@ More documents are in `docs/`. The repository is an MIT-licensed experimental de
 
 ### Rick's CrowdCell review: role requirements and reproducible evidence
 
-CellGuard v3 profiles now support `roleRequirements` for exact input/output lock-role presence, aggregate capacity and count bounds. The `finalize`, `pledge` and `refund` example profiles include basic role requirements, and `npm run test:policies` runs **13 exact synthetic safety scenarios** including a 474 CKB finalizer diversion, required dep, `since` and missing source/recipient cases. `npm run check` runs the regression suite.
+CellGuard v3 profiles now support `roleRequirements` for exact input/output lock-role presence, aggregate capacity and count bounds. The `finalize`, `pledge` and `refund` example profiles include basic role requirements, and `npm run test:policies` runs **21 exact synthetic safety scenarios** including a 474 CKB finalizer diversion, required dep, `since` and missing source/recipient cases. `npm run check` runs the regression suite.
 
 The new [policy and Testnet audit guide](docs/12_RICK_POLICY_ROLES_REORG_AND_CHAIN_EVIDENCE.md) covers historical reorg protection and how to run a **manual GitHub Actions historical RPC audit** of a real transaction with a real, non-example profile. Local fixture metadata must not be presented as Testnet evidence; real profile hashes and business rules must be independently checked before claiming application safety.

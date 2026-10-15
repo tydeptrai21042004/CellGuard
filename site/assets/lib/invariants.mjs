@@ -38,6 +38,9 @@ function parseInputEvidence(rawInputs, txInput) {
     return {
       index: i, capacity: parseU64Hex(cell.capacity, `resolvedInputs[${i}].capacity`),
       lock: validateScript(cell.lock, `resolvedInputs[${i}].lock`, { strict: true }),
+      // undefined means an RPC/fixture did not supply the type field; null means untyped.
+      type: Object.hasOwn(cell, 'type') ? (cell.type === null ? null :
+        validateScript(cell.type, `resolvedInputs[${i}].type`, { strict: true })) : undefined,
       since: decodeSince(txInput.inputs[i].since),
       outPoint: `${point.tx_hash.toLowerCase()}:${BigInt(point.index)}`
     };
@@ -45,6 +48,7 @@ function parseInputEvidence(rawInputs, txInput) {
 }
 export function evaluateInvariants(txInput, parsedOutputs, policy, { resolvedInputs, inputEvidence = 'unverified' } = {}) {
   const findings = [];
+  const protectedCells = [];
   const push = (code, severity, path, detail) => findings.push({ code, severity, path, detail });
   const rulesConfigured = policy.capacityFlow.length > 0 || policy.sinceRules.length > 0 || policy.allowedInputRoles.length > 0 || policy.roleRequirements.length > 0 || policy.maxFee !== null;
   const inputs = resolvedInputs === undefined ? null : parseInputEvidence(resolvedInputs, txInput);
@@ -100,7 +104,33 @@ export function evaluateInvariants(txInput, parsedOutputs, policy, { resolvedInp
   const net = name => aggregate[name].output - aggregate[name].input;
   if (inputs) for (const [i, rule] of policy.capacityFlow.entries()) {
     const path = `capacityFlow[${i}]`;
-    if (rule.kind === 'max-net-gain') {
+    if (rule.kind === 'preserve-typed-cell') {
+      if (inputs.some(cell => cell.type === undefined)) {
+        protectedCells.push({ id: rule.id, type: rule.type, status: 'missing-input-type-evidence' });
+        push('INPUT_TYPE_EVIDENCE_REQUIRED', 'error', path, `${rule.id}: type scripts for every resolved input are required to identify the protected Cell`);
+        continue;
+      }
+      const protectedInputs = inputs.filter(cell => sameScript(cell.type, rule.type));
+      const protectedOutputs = parsedOutputs.filter(output => sameScript(output.type, rule.type));
+      const protectedInput = protectedInputs.length === 1 ? protectedInputs[0] : null;
+      const protectedOutput = protectedOutputs.length === 1 ? protectedOutputs[0] : null;
+      protectedCells.push({ id: rule.id, type: rule.type,
+        status: protectedInputs.length !== 1 || protectedOutputs.length !== 1 ? 'count-mismatch' :
+          protectedOutput.capacity < protectedInput.capacity ? 'shrunk' : 'preserved',
+        inputCount: protectedInputs.length, outputCount: protectedOutputs.length,
+        inputIndex: protectedInput?.index ?? null, inputOutPoint: protectedInput?.outPoint ?? null,
+        outputIndex: protectedOutput?.index ?? null,
+        inputCapacityCKB: protectedInput ? formatCkb(protectedInput.capacity) : null,
+        outputCapacityCKB: protectedOutput ? formatCkb(protectedOutput.capacity) : null,
+        shortfallCKB: protectedInput && protectedOutput && protectedOutput.capacity < protectedInput.capacity ?
+          formatCkb(protectedInput.capacity - protectedOutput.capacity) : '0' });
+      if (protectedInputs.length !== 1 || protectedOutputs.length !== 1) {
+        push('PROTECTED_CELL_COUNT_MISMATCH', 'error', path, `${rule.id}: expected exactly one input and one output with the configured type script; found ${protectedInputs.length} input(s), ${protectedOutputs.length} output(s)`);
+      } else if (protectedOutputs[0].capacity < protectedInputs[0].capacity) {
+        push('PROTECTED_CELL_CAPACITY_SHRINK', 'error', `outputs[${protectedOutputs[0].index}].capacity`,
+          `${rule.id}: protected Cell fell from ${formatCkb(protectedInputs[0].capacity)} CKB to ${formatCkb(protectedOutputs[0].capacity)} CKB (shortfall ${formatCkb(protectedInputs[0].capacity - protectedOutputs[0].capacity)} CKB); no campaign capacity may fund a recipient or transaction fee`);
+      }
+    } else if (rule.kind === 'max-net-gain') {
       const gain = net(rule.role);
       if (gain > rule.maxGain) push('POLICY_UNAUTHORIZED_NET_GAIN', 'error', path, `${rule.id}: ${rule.role} gained ${formatCkb(gain)} CKB; allowed maximum ${formatCkb(rule.maxGain)} CKB`);
     } else if (rule.kind === 'min-recipient-net-gain') {
@@ -128,5 +158,5 @@ export function evaluateInvariants(txInput, parsedOutputs, policy, { resolvedInp
     inputCKB: formatCkb(aggregate[role].input), outputCKB: formatCkb(aggregate[role].output), netCKB: formatCkb(net(role)),
     inputCount: aggregate[role].inputCount, outputCount: aggregate[role].outputCount
   }]));
-  return { findings, roleBalances, feeCKB: fee === null ? null : formatCkb(fee), inputEvidence: inputs ? inputEvidence : 'missing', inputCount: inputs?.length ?? 0 };
+  return { findings, roleBalances, protectedCells, feeCKB: fee === null ? null : formatCkb(fee), inputEvidence: inputs ? inputEvidence : 'missing', inputCount: inputs?.length ?? 0 };
 }
