@@ -1,4 +1,4 @@
-# CellGuard v0.4 — Live CKB RPC + Browser E2E
+# CellGuard v0.5 — Live CKB RPC + Browser E2E
 
 ## What is truly online
 
@@ -27,7 +27,7 @@ CellGuard v0.4 retains all existing offline policy checks and adds a **read-only
 5. For a transaction **already submitted**, paste its 0x hash and select **lookup hash**. `committed` with confirmations is node-reported chain state; `pending` does not imply inclusion.
 6. Set edge/WAF rate limits and monitor RPC quotas and function invocations before making the API publicly accessible at scale. The demo backend is unauthenticated but heavily constrained; it is not a full multi-tenant production gateway.
 
-The backend disallows arbitrary user-selected node addresses, arbitrary JSON-RPC method invocation and RPC submissions. It checks Origin, rejects duplicate JSON properties, limits requests to ~256 KiB online, at most 16 inputs/64 deps, a 25-second verification time budget, upstream response size limits, and HTTPS-only provider configuration. Localhost HTTP is supported **only** when `CKB_ALLOW_LOCAL_RPC=1` is set by the server operator.
+The backend disallows arbitrary user-selected node addresses, arbitrary JSON-RPC method invocation and RPC submissions. It checks Origin, parses raw JSON to reject duplicate properties, limits requests to ~256 KiB online, at most 16 inputs/64 deps, a 25-second verification time budget, bounded streaming upstream response sizes, and HTTPS-only provider configuration. Per-instance admission control permits up to six outstanding verification requests; it is **not** a distributed rate limit and does not replace the edge/WAF quota recommended above. Localhost HTTP is supported **only** when `CKB_ALLOW_LOCAL_RPC=1` is set by the server operator.
 
 ## CLI
 

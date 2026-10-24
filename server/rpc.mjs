@@ -14,6 +14,33 @@ export function rpcEndpoint(network, env = process.env) {
   if (url.username || url.password || url.search || url.hash) throw new VerificationError('RPC_CONFIG', 'RPC URL must not include credentials, query or fragment', 500);
   return url.toString();
 }
+/** Read JSON-RPC response bodies with an actual byte ceiling even without a
+ * Content-Length header (streaming transfer is normal for some gateways).
+ */
+export async function readRpcResponse(response, maxBytes = MAX_RPC_RESULT) {
+  if (response.body && typeof response.body.getReader === 'function') {
+    const reader = response.body.getReader();
+    const chunks = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) throw new VerificationError('RPC_RESPONSE_TOO_LARGE', 'RPC response too large', 502);
+        chunks.push(Buffer.from(value));
+      }
+    } catch (error) {
+      await reader.cancel().catch(() => {});
+      throw error;
+    } finally { reader.releaseLock(); }
+    return Buffer.concat(chunks, total).toString('utf8');
+  }
+  // Some injected test transports implement text() but have no ReadableStream.
+  const value = await response.text();
+  if (Buffer.byteLength(value, 'utf8') > maxBytes) throw new VerificationError('RPC_RESPONSE_TOO_LARGE', 'RPC response too large', 502);
+  return value;
+}
 export function createRpc(network, { fetchImpl = globalThis.fetch, env = process.env, timeoutMs = 7000 } = {}) {
   const endpoint = rpcEndpoint(network, env);
   let id = 0;
@@ -30,12 +57,15 @@ export function createRpc(network, { fetchImpl = globalThis.fetch, env = process
     } catch (err) { throw new VerificationError('RPC_UNAVAILABLE', `Unable to reach ${network} RPC: ${err instanceof Error ? err.message.slice(0,100) : 'request failed'}`, 503); }
     if (!response.ok) throw new VerificationError('RPC_HTTP', `RPC returned HTTP ${response.status}`, 502);
     if (Number(response.headers.get('content-length')) > MAX_RPC_RESULT) throw new VerificationError('RPC_RESPONSE_TOO_LARGE', 'RPC response too large', 502);
+    let body;
+    try { body = await readRpcResponse(response); }
+    catch (error) {
+      if (error instanceof VerificationError) throw error;
+      throw new VerificationError('RPC_RESPONSE_INVALID', 'Could not read RPC response', 502);
+    }
     let payload;
-    try {
-      const body = await response.text();
-      if (body.length > MAX_RPC_RESULT) throw Error('RPC response too large');
-      payload = JSON.parse(body);
-    } catch { throw new VerificationError('RPC_RESPONSE_INVALID', 'Malformed RPC response', 502); }
+    try { payload = JSON.parse(body); }
+    catch { throw new VerificationError('RPC_RESPONSE_INVALID', 'Malformed RPC response', 502); }
     if (!payload || payload.jsonrpc !== '2.0' || payload.id !== requestId) throw new VerificationError('RPC_RESPONSE_INVALID', 'Mismatched RPC request/response ID', 502);
     if (payload.error) {
       const err = new VerificationError('RPC_METHOD_ERROR', typeof payload.error.message === 'string' ? payload.error.message.slice(0,320) : 'CKB RPC failed', 502);

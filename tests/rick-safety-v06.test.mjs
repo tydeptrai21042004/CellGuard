@@ -161,9 +161,10 @@ test('chain evidence validator refuses placeholder policies and unaudited chain 
   try {
     mkdirSync(join(dir,'evidence'));
     writeFileSync(join(dir,'profile.json'),JSON.stringify(finalizeProfile));
-    const payload={mode:'committed-audit',network:'testnet',hash:txHash,status:'pass',chainStatus:'committed',
+    const payload={mode:'committed-audit',network:'testnet',chain:'ckb_testnet',hash:txHash,status:'pass',chainStatus:'committed',
+      blockHash,blockNumber:'0x55',proof:{status:'verified-by-node'},
       independentProof:false,confirmations:'12',accounting:{provenance:'role-level-accounting-not-coin-tracing',inputs:[{index:0}],outputs:[{index:0}],roles:[]},capacityFlow:{inputEvidence:'rpc-historical'},
-      checks:{historicalInputs:'resolved-from-canonical-parent-transactions'},findings:[]};
+      checks:{policy:'pass',historicalInputs:'resolved-from-canonical-parent-transactions'},findings:[]};
     writeFileSync(join(dir,'evidence/real-chain-report.json'),JSON.stringify(payload));
     const env={...process.env,AUDIT_TX_HASH:txHash,AUDIT_NETWORK:'testnet',AUDIT_PROFILE_PATH:'profile.json',
       AUDIT_EXPECTED_STATUS:'pass',AUDIT_CLI_EXIT_CODE:'0'};
@@ -205,10 +206,11 @@ test('real-chain evidence validator requires exact detection codes and enough co
     }
     policy.requiredCellDeps[0].out_point.tx_hash='0x'+'8'.repeat(64);
     writeFileSync(join(dir,'policy.json'),JSON.stringify(policy));
-    const evidence={ mode:'committed-audit',network:'testnet',hash:txHash,
+    const evidence={ mode:'committed-audit',network:'testnet',chain:'ckb_testnet',hash:txHash,
+      blockHash,blockNumber:'0x55',proof:{status:'verified-by-node'},
       status:'policy-failed',chainStatus:'committed',confirmations:'9',independentProof:false,
       capacityFlow:{inputEvidence:'rpc-historical'},
-      checks:{historicalInputs:'resolved-from-canonical-parent-transactions'},
+      checks:{policy:'fail',historicalInputs:'resolved-from-canonical-parent-transactions'},
       accounting:{provenance:'role-level-accounting-not-coin-tracing',inputs:[{index:0}],outputs:[{index:0}],roles:[]},
       findings:[{severity:'error',code:'CAPACITY_LEAK_DETECTED'}] };
     const write=()=>writeFileSync(join(dir,'evidence/real-chain-report.json'),JSON.stringify(evidence));
@@ -218,6 +220,14 @@ test('real-chain evidence validator requires exact detection codes and enough co
     const script=new URL('../scripts/validate-testnet-audit.mjs',import.meta.url).pathname;
     const run=()=>spawnSync(process.execPath,[script],{cwd:dir,env,encoding:'utf8'});
     write();assert.equal(run().status,0);
+    env.AUDIT_REQUIRED_CODES='';assert.equal(run().status,1,'missing exact negative code must fail');
+    env.AUDIT_REQUIRED_CODES='CAPACITY_LEAK_DETECTED';
+    evidence.proof.status='invalid';write();assert.equal(run().status,1,'invalid proof must fail');
+    evidence.proof.status='verified-by-node';
+    evidence.chain='ckb';write();assert.equal(run().status,1,'wrong chain identity must fail');
+    evidence.chain='ckb_testnet';
+    evidence.checks.policy='pass';write();assert.equal(run().status,1,'wrong policy result must fail');
+    evidence.checks.policy='fail';write();assert.equal(run().status,0);
     env.AUDIT_REQUIRED_CODES='POLICY_REQUIRED_CELL_DEP';assert.equal(run().status,1);
     env.AUDIT_REQUIRED_CODES='CAPACITY_LEAK_DETECTED';evidence.confirmations='2';write();assert.equal(run().status,1);
     evidence.confirmations='9';evidence.accounting=undefined;write();assert.equal(run().status,1);

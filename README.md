@@ -30,9 +30,9 @@ npm run dev
 
 A **terminal-style web interface plus real Node CLI** for offline CKB transaction-output inspection and application policy preflight. Browser prompt commands never execute system shell commands. `cli/cellguard.mjs` is an actual command-line tool intended for CI checks.
 
-**Version 0.3.0 · static site · zero npm dependencies · Vercel-ready · no API keys.**
+**Current release: v0.5.0 · static browser app with an optional read-only Node/Vercel RPC endpoint · no npm dependencies.**
 
-> **Security scope:** CellGuard examines `outputs` and `outputs_data`, optionally checks raw transaction structure (policy v2), calculates occupied capacity with `BigInt`, and applies configurable application policy. It does **not** look up transaction hashes, call RPC, check input liveness/signatures, calculate fees, execute CKB-VM, measure script cycles, or establish on-chain validity. Included examples are synthetic fixtures, NOT on-chain testnet samples. A green policy result is **not** a successful consensus verification.
+> **Security scope:** Offline inspection does not establish chain validity. Optional read-only CKB RPC preflight and historical lookup can report node-observed input state, fees, script execution and commitment, but do **not** sign, broadcast, provide independent consensus proofs, or certify CrowdCell contract safety. Included example fixtures remain synthetic.
 
 ## Quick start
 
@@ -63,7 +63,7 @@ npm run check
 
 Use **open editor** to paste raw transaction JSON, upload a local `.json` file (max 1 MiB), and edit the policy. Click **inspect JSON** or press **Ctrl/⌘+Enter** inside an editor. Use **copy JSON** or **export report** to extract a result. All operations take place locally in the browser.
 
-**Transaction hashes are deliberately unsupported** in this release: `inspect 0x...` explains that raw transaction JSON is required. Script groups and cycle counts are not fabricated.
+The offline `inspect` command requires transaction JSON, not a bare hash. Online **lookup hash** uses the read-only server and a configured CKB RPC; optional historical policy audit also requires a reviewed profile. Neither mode fabricates script groups or cycle counts.
 
 ## Native CLI / GitHub Actions
 
@@ -75,7 +75,7 @@ node cli/cellguard.mjs --transaction examples/safe-tx.json --policy examples/str
 node cli/cellguard.mjs --transaction examples/risk-tx.json --compare examples/safe-tx.json
 ```
 
-Exit codes: `0` = configured checks pass; `1` = policy violation or warnings with `--fail-on-warning`; `2` = invalid input/configuration. Exit `0` does **not** establish transaction validity or chain safety. See `docs/08_CELLGUARD_V03_USAGE.md` for v2 rule semantics and limitations.
+Exit codes: `0` = configured checks pass; `1` = policy violation or warnings with `--fail-on-warning`; `2` = invalid input/configuration; `3` = inconclusive/untrusted verification in CI mode. Exit `0` does **not** establish independent chain validity or finality. See `docs/08_CELLGUARD_V03_USAGE.md` for v2 rule semantics and limitations.
 
 ## Deploy to Vercel
 
@@ -84,7 +84,7 @@ Exit codes: `0` = configured checks pass; `1` = policy violation or warnings wit
 3. Leave **Root Directory** as `.`, choose **Other** for framework, set **Output Directory** to `site`.
 4. Leave Build Command unset and deploy; `vercel.json` supplies static settings and security headers.
 
-No server-side runtime or environment variables are needed. The CSP includes `connect-src 'none'`, preventing network requests by the deployed browser application. For more detailed deployment steps see [`docs/01_TRIEN_KHAI_VERCEL.md`](docs/01_TRIEN_KHAI_VERCEL.md).
+The offline browser view requires no provider secrets. The optional `/api/verify` Node Function uses configured read-only CKB RPC endpoints; its CSP permits `connect-src 'self'` only, so the frontend talks to its own backend. Configure edge rate limits before a public high-traffic deployment. For more detailed deployment steps see [`docs/01_TRIEN_KHAI_VERCEL.md`](docs/01_TRIEN_KHAI_VERCEL.md).
 
 ## Raw transaction input
 
@@ -166,7 +166,7 @@ site/
       strict-json.mjs       # Duplicate-key-rejecting bounded parser
       diff.mjs              # Indexed output comparison
 cli/
-  cellguard.mjs            # Native Node CI runner; no RPC or wallet
+  cellguard.mjs            # Native Node CI runner; offline or read-only RPC, no wallet
 examples/                   # Synthetic transaction and strict-policy JSON
 scripts/
   serve.mjs                 # Local HTTP dev server
@@ -180,7 +180,7 @@ vercel.json                # No-build static site + CSP
 
 Run `npm run check` to verify the deterministic analyzer, v2 policy constraints, duplicate-key parser, CLI, negative tests, command parser, asset syntax, and Vercel configuration. CI executes the same checks without installing dependencies.
 
-A future RPC integration, if explicitly designed and opt-in, would require new CSP/network policies, chain-specific validation, independent verification against real transactions, abuse prevention, and security review. **This release remains deliberately offline and read-only.**
+The opt-in read-only RPC integration is implemented, with a bounded streaming parser and per-instance concurrent-request limit. It still requires externally configured edge rate limits for public traffic, actual Testnet evidence with verified deployment identities, and independent builder execution. See [Testnet evidence and remaining technical debt](docs/15_TESTNET_EVIDENCE_AND_DEBT.md).
 
 More documents are in `docs/`. The repository is an MIT-licensed experimental developer tool, not an audit certificate or funding approval.
 

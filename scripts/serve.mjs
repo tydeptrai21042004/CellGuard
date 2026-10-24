@@ -15,9 +15,13 @@ const server = http.createServer(async (req, res) => {
         method: req.method, origin: req.headers.origin, host: req.headers.host,
         contentType: req.headers['content-type'], contentLength: req.headers['content-length'],
         readBody: async limit => {
-          let body = '';
-          for await (const part of req) { body += part.toString(); if (Buffer.byteLength(body) > limit) throw Object.assign(new Error('Request too large'), { code: 'TOO_LARGE' }); }
-          return body;
+          const chunks = []; let total = 0;
+          for await (const part of req) {
+            total += part.byteLength;
+            if (total > limit) throw Object.assign(new Error('Request too large'), { code: 'TOO_LARGE' });
+            chunks.push(part);
+          }
+          return Buffer.concat(chunks, total).toString('utf8');
         }
       });
       res.writeHead(reply.status, jsonHeaders()).end(JSON.stringify(reply.body));

@@ -2,6 +2,10 @@ import { verifyTransactionOnline, lookupTransactionOnline, auditCommittedTransac
 import { createRpc } from './rpc.mjs';
 import { parseStrictJSON } from '../site/assets/lib/strict-json.mjs';
 
+// Per-instance admission control only; use a shared edge quota for distributed abuse protection.
+const MAX_ACTIVE_VERIFICATIONS = 6;
+let activeVerifications = 0;
+
 export function checkOrigin(origin, host) {
   if (!origin) return true; // CLI / same-origin browsers without Origin
   try { const from = new URL(origin); return (from.protocol === 'https:' || from.protocol === 'http:') && from.host === host; }
@@ -23,12 +27,15 @@ export async function handleHttpVerification({ method, origin, host, contentType
   if (method !== 'POST') return { status: 405, body: { error: { code: 'METHOD', message: 'POST required' } } };
   if (!checkOrigin(origin, host)) return { status: 403, body: { error: { code: 'ORIGIN', message: 'Cross-origin requests are not allowed' } } };
   if (!/^application\/json(?:\s*;|$)/i.test(contentType || '')) return { status: 415, body: { error: { code: 'MEDIA_TYPE', message: 'application/json required' } } };
-  if (contentLength && Number(contentLength) > ONLINE_LIMIT + 16384) return { status: 413, body: { error: { code: 'TOO_LARGE', message: 'Request exceeds online limit' } } };
+  if (contentLength && (!/^(?:0|[1-9][0-9]*)$/.test(String(contentLength)) || BigInt(contentLength) > BigInt(ONLINE_LIMIT + 16384))) return { status: 413, body: { error: { code: 'TOO_LARGE', message: 'Request exceeds online limit' } } };
+  if (activeVerifications >= MAX_ACTIVE_VERIFICATIONS) return { status: 429, body: { error: { code: 'BUSY', message: 'Verification capacity reached; retry later' } } };
+  activeVerifications++;
   try {
     const raw = await readBody(ONLINE_LIMIT + 16384);
     let request;
-    try { request = typeof raw === 'string' ? parseStrictJSON(raw, 'RPC verification request') : raw; }
+    try { request = parseStrictJSON(raw, 'RPC verification request', { maxBytes: ONLINE_LIMIT + 16384 }); }
     catch { throw new VerificationError('BAD_JSON', 'Invalid JSON request or duplicate property', 400); }
     return { status: 200, body: await handleVerify(request, rpcFactory) };
   } catch (error) { return sanitizeError(error); }
+  finally { activeVerifications--; }
 }
