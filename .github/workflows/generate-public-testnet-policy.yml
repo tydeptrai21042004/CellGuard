@@ -1,0 +1,51 @@
+name: CellGuard generate public Testnet policy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-policy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out selected branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check CellGuard code and tests
+        run: npm run check
+
+      - name: Generate and RPC-validate strict-v3 public Testnet policy
+        run: node scripts/generate-public-testnet-policy.mjs
+
+      - name: Upload policy JSON for manual inspection or recovery
+        uses: actions/upload-artifact@v4
+        with:
+          name: cellguard-public-testnet-policy-${{ github.run_id }}
+          path: configs/public-testnet-consolidation-v3.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Commit policy to the selected branch
+        env:
+          TARGET_BRANCH: ${{ github.ref_name }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- configs/public-testnet-consolidation-v3.json
+          if git diff --cached --quiet; then
+            echo 'Policy JSON is already committed with the same contents.'
+          else
+            git commit -m 'Add RPC-validated public CKB Testnet consolidation policy'
+            git push origin "HEAD:${TARGET_BRANCH}"
+          fi
