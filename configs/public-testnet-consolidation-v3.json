@@ -1,0 +1,90 @@
+{
+  "version": 3,
+  "profile": "public-testnet-consolidation-v3",
+  "strictTransactionShape": true,
+  "minOutputs": 1,
+  "maxOutputs": 1,
+  "requireOutputDataEmpty": true,
+  "maxDataBytesPerOutput": 0,
+  "maxTotalDataBytes": 0,
+  "denyTypeScripts": true,
+  "maxTypeScriptOutputs": 0,
+  "requireAllowedLock": true,
+  "allowedLockScripts": [
+    {
+      "code_hash": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
+      "hash_type": "type",
+      "args": "0x564088718c071c649a80b104fd0fa643e4408ff9"
+    }
+  ],
+  "allowedLockCodeHashes": [
+    "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8"
+  ],
+  "roles": {
+    "consolidator": {
+      "code_hash": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
+      "hash_type": "type",
+      "args": "0x564088718c071c649a80b104fd0fa643e4408ff9"
+    }
+  },
+  "allowedInputRoles": [
+    "consolidator"
+  ],
+  "allowedOutputRoles": [
+    "consolidator"
+  ],
+  "requiredOutputs": [
+    {
+      "lock": {
+        "code_hash": "0x9bd7e06f3ecf4be0f2fcd2188b23f1b9fcc88e5d4b65a8637b17723bbda3cce8",
+        "hash_type": "type",
+        "args": "0x564088718c071c649a80b104fd0fa643e4408ff9"
+      },
+      "type": null,
+      "minCapacityCKB": "268",
+      "maxCapacityCKB": "269",
+      "minCount": 1,
+      "maxCount": 1
+    }
+  ],
+  "requiredCellDeps": [
+    {
+      "dep_type": "dep_group",
+      "out_point": {
+        "index": "0x0",
+        "tx_hash": "0xf8de3bb47d055cdf460d93a2a6e1b05f7432f9777c8c474abf4eec1d4aee5d37"
+      }
+    }
+  ],
+  "roleRequirements": [
+    {
+      "role": "consolidator",
+      "minInputCount": 3,
+      "maxInputCount": 3,
+      "minOutputCount": 1,
+      "maxOutputCount": 1,
+      "minInputCapacityCKB": "268",
+      "maxInputCapacityCKB": "269",
+      "minOutputCapacityCKB": "268",
+      "maxOutputCapacityCKB": "269"
+    }
+  ],
+  "capacityFlow": [
+    {
+      "id": "consolidator-no-net-gain",
+      "kind": "max-net-gain",
+      "role": "consolidator",
+      "maxGainCKB": "0"
+    }
+  ],
+  "sinceRules": [
+    {
+      "id": "consolidation-no-since-lock",
+      "role": "consolidator",
+      "operator": "exact",
+      "value": "0x0",
+      "requireMatch": true
+    }
+  ],
+  "maxFeeCKB": "0.00010000"
+}
