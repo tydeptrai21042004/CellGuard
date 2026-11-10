@@ -13,7 +13,9 @@
     "cli": "node cli/cellguard.mjs",
     "test:e2e": "python3 tests/browser-e2e.py",
     "check": "node scripts/check-build.mjs && node --test tests/*.test.mjs",
-    "test:policies": "node scripts/policy-regression.mjs"
+    "test:policies": "node scripts/policy-regression.mjs",
+    "test:crowdcell-integration": "node --test tests/crowdcell-bridge.test.mjs",
+    "crowdcell:guard": "node integrations/crowdcell/cli.mjs"
   },
   "license": "MIT"
 }

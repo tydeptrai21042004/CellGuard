@@ -189,3 +189,9 @@ More documents are in `docs/`. The repository is an MIT-licensed experimental de
 CellGuard v3 profiles now support `roleRequirements` for exact input/output lock-role presence, aggregate capacity and count bounds. The `finalize`, `pledge` and `refund` example profiles include basic role requirements, and `npm run test:policies` runs **21 exact synthetic safety scenarios** including a 474 CKB finalizer diversion, required dep, `since` and missing source/recipient cases. `npm run check` runs the regression suite.
 
 The new [policy and Testnet audit guide](docs/12_RICK_POLICY_ROLES_REORG_AND_CHAIN_EVIDENCE.md) covers historical reorg protection and how to run a **manual GitHub Actions historical RPC audit** of a real transaction with a real, non-example profile. Local fixture metadata must not be presented as Testnet evidence; real profile hashes and business rules must be independently checked before claiming application safety.
+
+## CrowdCell integration pilot (read-only preflight)
+
+`integrations/crowdcell/` adds an opt-in **Testnet-only finalize guard** for CrowdCell transactions produced through CCC. It converts CCC transaction fields to CKB RPC JSON, requires the exact campaign Type Script and a strict reviewed policy, and supports read-only VM + txpool preflight before broadcasting the **same signed transaction**. The CLI never signs or broadcasts. Current tests are synthetic/mock-RPC; no upstream CrowdCell source was patched, and no actual live CrowdCell finalize integration is claimed.
+
+Start with [`docs/16_CROWDCELL_LIVE_INTEGRATION.md`](docs/16_CROWDCELL_LIVE_INTEGRATION.md), then run `npm run test:crowdcell-integration` and `npm run crowdcell:guard -- --help`.
